@@ -1,0 +1,26 @@
+<Project Sdk="Microsoft.NET.Sdk.Web">
+
+  <ItemGroup>
+    <ProjectReference Include="..\AIOps.Abstractions\AIOps.Abstractions.csproj" />
+    <ProjectReference Include="..\AIOps.Contracts\AIOps.Contracts.csproj" />
+    <ProjectReference Include="..\AIOps.Domain\AIOps.Domain.csproj" />
+    <ProjectReference Include="..\AIOps.Grains\AIOps.Grains.csproj" />
+    <ProjectReference Include="..\AIOps.Orchestration\AIOps.Orchestration.csproj" />
+    <ProjectReference Include="..\AIOps.Tools\AIOps.Tools.csproj" />
+    <ProjectReference Include="..\AIOps.Infrastructure\AIOps.Infrastructure.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.Orleans.Server" Version="10.3.1" />
+    <PackageReference Include="MudBlazor" Version="9.9.0" />
+    <PackageReference Include="Serilog.AspNetCore" Version="10.0.0" />
+  </ItemGroup>
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <BlazorDisableThrowNavigationException>true</BlazorDisableThrowNavigationException>
+  </PropertyGroup>
+
+</Project>

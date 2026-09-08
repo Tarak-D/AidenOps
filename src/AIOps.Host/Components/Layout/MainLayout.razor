@@ -1,0 +1,24 @@
+﻿@inherits LayoutComponentBase
+
+<MudThemeProvider />
+<MudPopoverProvider />
+<MudDialogProvider />
+<MudSnackbarProvider />
+
+<MudLayout>
+    <MudAppBar Elevation="1">
+        <MudIcon Icon="@Icons.Material.Filled.SmartToy" Class="mr-2" />
+        <MudText Typo="Typo.h6">AIOps Agent Platform</MudText>
+        <MudSpacer />
+        <MudChip T="string" Color="Color.Info" Variant="Variant.Outlined" Size="Size.Small">Phase 1 — Foundation</MudChip>
+    </MudAppBar>
+    <MudMainContent Class="pa-6">
+        @Body
+    </MudMainContent>
+</MudLayout>
+
+<div id="blazor-error-ui" data-nosnippet>
+    An unhandled error has occurred.
+    <a href="." class="reload">Reload</a>
+    <span class="dismiss">🗙</span>
+</div>

@@ -1,0 +1,42 @@
+# .NET
+bin/
+obj/
+out/
+*.user
+*.suo
+.vs/
+.idea/
+[Dd]ebug/
+[Rr]elease/
+artifacts/
+
+# Secrets — NEVER commit
+*.secrets.json
+secrets.json
+.env
+.env.*
+!.env.example
+
+# Logs
+logs/
+*.log
+
+# Python (ai/ vertical, later phases)
+__pycache__/
+*.pyc
+.venv/
+.uv/
+*.egg-info/
+.pytest_cache/
+ml/artifacts/*.joblib
+
+# Data (local scratch; curated datasets ARE committed)
+data/scratch/
+
+# OS
+Thumbs.db
+.DS_Store
+
+# Local .NET configuration
+appsettings.Local.json
+appsettings.Development.local.json

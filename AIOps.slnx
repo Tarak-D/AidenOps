@@ -1,0 +1,20 @@
+<Solution>
+  <Folder Name="/src/">
+    <Project Path="src/AIOps.Abstractions/AIOps.Abstractions.csproj" />
+    <Project Path="src/AIOps.Contracts/AIOps.Contracts.csproj" />
+    <Project Path="src/AIOps.Domain/AIOps.Domain.csproj" />
+    <Project Path="src/AIOps.Grains/AIOps.Grains.csproj" />
+    <Project Path="src/AIOps.Host/AIOps.Host.csproj" />
+    <Project Path="src/AIOps.Infrastructure/AIOps.Infrastructure.csproj" />
+    <Project Path="src/AIOps.Orchestration/AIOps.Orchestration.csproj" />
+    <Project Path="src/AIOps.Tools/AIOps.Tools.csproj" />
+  </Folder>
+  <Folder Name="/tests/">
+    <Project Path="tests/AIOps.Abstractions.Tests/AIOps.Abstractions.Tests.csproj" />
+    <Project Path="tests/AIOps.Api.Tests/AIOps.Api.Tests.csproj" />
+    <Project Path="tests/AIOps.Domain.Tests/AIOps.Domain.Tests.csproj" />
+    <Project Path="tests/AIOps.Grains.Tests/AIOps.Grains.Tests.csproj" />
+    <Project Path="tests/AIOps.Orchestration.Tests/AIOps.Orchestration.Tests.csproj" />
+    <Project Path="tests/AIOps.Tools.Tests/AIOps.Tools.Tests.csproj" />
+  </Folder>
+</Solution>
