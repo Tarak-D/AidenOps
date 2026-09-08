@@ -20,7 +20,7 @@ builder.Host.UseSerilog((ctx, lc) => lc
 builder.UseOrleans(silo =>
 {
     silo.UseLocalhostClustering();
-    silo.AddMemoryGrainStorage("ticketStore"); // ADR-0003: ADO.NET/PostgreSQL provider in Phase 3
+    silo.AddAdoNetGrainStorage("ticketStore", options => { options.Invariant = "Npgsql"; options.ConnectionString = builder.Configuration.GetConnectionString("PostgresConnection") ?? throw new InvalidOperationException("PostgresConnection is not configured."); });
 });
 
 // --- Blazor + MudBlazor ---
@@ -71,11 +71,11 @@ app.MapGet("/api/v1/meta/selfcheck", (
         auditStore = audit.GetType().Name,
         ticketRepository = tickets.GetType().Name,
         clock = clock.GetType().Name,
-        orleans = "co-hosted silo, memory grain storage (ticketStore)"
+        orleans = "co-hosted silo, PostgreSQL ADO.NET grain storage (ticketStore)"
     }))
     .WithTags("Meta").AllowAnonymous();
 
-// Echoes non-secret config only. Never returns secret values — only whether they are set.
+// Echoes non-secret config only. Never returns secret values - only whether they are set.
 app.MapGet("/api/v1/meta/config", (IConfiguration config) => Results.Ok(new
 {
     agentGatewayMode = config["AI:AgentGatewayMode"] ?? "Fake",

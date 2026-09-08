@@ -1,0 +1,20 @@
+﻿services:
+  postgres:
+    image: pgvector/pgvector:pg15
+    container_name: aios-postgres
+    environment:
+      POSTGRES_DB: aios
+      POSTGRES_USER: aios
+      POSTGRES_PASSWORD: aiospw
+    ports:
+      - "5432:5432"
+    volumes:
+      - aios_pg_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U aios -d aios"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+volumes:
+  aios_pg_data:
