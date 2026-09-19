@@ -4,12 +4,14 @@ using AIOps.Abstractions.Audit;
 using AIOps.Abstractions.Configuration;
 using AIOps.Abstractions.Evaluation;
 using AIOps.Abstractions.Integrations;
+using AIOps.Abstractions.Knowledge;
 using AIOps.Abstractions.Persistence;
 using AIOps.Abstractions.Time;
 using AIOps.Infrastructure.Agents;
 using AIOps.Infrastructure.Audit;
 using AIOps.Infrastructure.EfCore;
 using AIOps.Infrastructure.Evaluation;
+using AIOps.Infrastructure.Knowledge;
 using AIOps.Infrastructure.Persistence;
 using AIOps.Infrastructure.Time;
 using Microsoft.EntityFrameworkCore;
@@ -26,11 +28,18 @@ public static class DependencyInjection
     /// Phase 3: persistence is EF Core + PostgreSQL for audit and evaluation.
     /// Phase 5: swap the agent gateway to the Python/LangGraph HTTP service based on configuration (AI:AgentGatewayMode).
     /// </summary>
-    public static IServiceCollection AddAIOpsInfrastructure(this IServiceCollection services, IConfiguration config)
+    public static IServiceCollection AddAIOpsInfrastructure(
+        this IServiceCollection services,
+        IConfiguration config)
     {
-        services.Configure<AIOptions>(config.GetSection(AIOptions.SectionName));
-        services.Configure<ApprovalOptions>(config.GetSection(ApprovalOptions.SectionName));
-        services.Configure<AgentPolicyOptions>(config.GetSection(AgentPolicyOptions.SectionName));
+        services.Configure<AIOptions>(
+            config.GetSection(AIOptions.SectionName));
+
+        services.Configure<ApprovalOptions>(
+            config.GetSection(ApprovalOptions.SectionName));
+
+        services.Configure<AgentPolicyOptions>(
+            config.GetSection(AgentPolicyOptions.SectionName));
 
         services.AddSingleton<IClock, SystemClock>();
         services.AddSingleton<ICloudProvider, SimulatedCloudProvider>();
@@ -38,14 +47,26 @@ public static class DependencyInjection
         services.AddSingleton<IItsmConnector, SimulatedItsmConnector>();
         services.AddSingleton<INetworkDiagnostics, SimulatedNetworkDiagnostics>();
 
-        var connectionString = config.GetConnectionString("PostgresConnection");
+        var connectionString =
+            config.GetConnectionString("PostgresConnection");
+
         if (!string.IsNullOrWhiteSpace(connectionString))
         {
             services.AddDbContext<AIOpsDbContext>(options =>
-                options.UseNpgsql(connectionString));
+                options.UseNpgsql(
+                    connectionString,
+                    npgsqlOptions => npgsqlOptions.UseVector()));
 
             services.AddSingleton<IAuditStore, PostgresAuditStore>();
             services.AddSingleton<IEvaluationStore, PostgresEvaluationStore>();
+
+            // Phase 7: RAG / knowledge retrieval.
+            services.AddScoped<IEmbeddingGenerator, DeterministicEmbeddingGenerator>();
+            services.AddScoped<IKnowledgeStore, PostgresKnowledgeStore>();
+
+            services.AddScoped<IActionExecutionStore, PostgresActionExecutionStore>();
+            services.AddScoped<IApprovalStore, PostgresApprovalStore>();
+            services.AddScoped<IApprovalValidator, PostgresApprovalStore>();
 
             services.AddHealthChecks()
                 .AddNpgSql(connectionString);
@@ -59,14 +80,24 @@ public static class DependencyInjection
 
         services.AddSingleton<ITicketRepository, InMemoryTicketRepository>();
 
-        var gatewayMode = config.GetValue<string>($"{AIOptions.SectionName}:AgentGatewayMode") ?? "Fake";
-        if (string.Equals(gatewayMode, "Http", StringComparison.OrdinalIgnoreCase))
+        var gatewayMode =
+            config.GetValue<string>(
+                $"{AIOptions.SectionName}:AgentGatewayMode")
+            ?? "Fake";
+
+        if (string.Equals(
+                gatewayMode,
+                "Http",
+                StringComparison.OrdinalIgnoreCase))
         {
             // Phase 5: HttpAgentGateway targeting the Python/LangGraph service.
             throw new NotSupportedException(
                 "AI:AgentGatewayMode=Http is not available until Phase 5. Use 'Fake'.");
         }
-        services.AddSingleton<IAgentGateway, InProcessFakeAgentGateway>();
+
+        services.AddSingleton<
+            IAgentGateway,
+            InProcessFakeAgentGateway>();
 
         return services;
     }
