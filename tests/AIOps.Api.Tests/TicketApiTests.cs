@@ -1,4 +1,3 @@
-using AIOps.Infrastructure.Integrations;
 using System.Net;
 using System.Net.Http.Json;
 using System.Text.Json;
@@ -6,6 +5,7 @@ using AIOps.Abstractions.Integrations;
 using AIOps.Abstractions.Tools;
 using AIOps.Contracts.Api;
 using AIOps.Domain;
+using AIOps.Infrastructure.Integrations;
 using AIOps.Tools;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Mvc;
@@ -54,7 +54,8 @@ public sealed class TicketApiTests : IClassFixture<WebApplicationFactory<Program
             HttpStatusCode.Created,
             create.StatusCode);
 
-        var dto = await create.Content.ReadFromJsonAsync<TicketDetailDto>(Json);
+        var dto =
+            await create.Content.ReadFromJsonAsync<TicketDetailDto>(Json);
 
         Assert.NotNull(dto);
         Assert.Equal(
@@ -200,26 +201,68 @@ public sealed class TicketApiTests : IClassFixture<WebApplicationFactory<Program
         var toolRegistry =
             _fixture.Services.GetRequiredService<IToolRegistry>();
 
-        var cloudProvider =
-            _fixture.Services.GetRequiredService<ICloudProvider>();
-
-        var tool =
+        var instanceStatusTool =
             toolRegistry.Get("Cloud.GetInstanceStatus");
 
-        Assert.NotNull(tool);
+        Assert.NotNull(instanceStatusTool);
+        Assert.IsType<GetInstanceStatusTool>(instanceStatusTool);
+        Assert.Equal(
+            "Cloud.GetInstanceStatus",
+            instanceStatusTool.Name);
 
-        Assert.IsType<GetInstanceStatusTool>(tool);
         var restartTool =
-        toolRegistry.Get("Cloud.RestartInstance");
+            toolRegistry.Get("Cloud.RestartInstance");
+
         Assert.NotNull(restartTool);
         Assert.IsType<RestartInstanceTool>(restartTool);
         Assert.Equal(
             RiskLevel.Moderate,
             restartTool.Risk);
-            Assert.True(restartTool.RequiresApproval);
-            Assert.IsType<SimulatedCloudProvider>(cloudProvider);
-            Assert.Equal(
-                "Cloud.GetInstanceStatus",
-                tool.Name);
+        Assert.True(
+            restartTool.RequiresApproval);
+
+        var resetPasswordTool =
+            toolRegistry.Get("Directory.ResetPassword");
+
+        Assert.NotNull(resetPasswordTool);
+        Assert.IsType<ResetPasswordTool>(resetPasswordTool);
+        Assert.Equal(
+            RiskLevel.Sensitive,
+            resetPasswordTool.Risk);
+        Assert.True(
+            resetPasswordTool.RequiresApproval);
+
+        var grantGroupAccessTool =
+            toolRegistry.Get("Directory.GrantGroupAccess");
+
+        Assert.NotNull(grantGroupAccessTool);
+        Assert.IsType<GrantGroupAccessTool>(grantGroupAccessTool);
+        Assert.Equal(
+            RiskLevel.Sensitive,
+            grantGroupAccessTool.Risk);
+        Assert.True(
+            grantGroupAccessTool.RequiresApproval);
+
+        var updateTicketTool =
+            toolRegistry.Get("ITSM.UpdateTicket");
+
+        Assert.NotNull(updateTicketTool);
+        Assert.IsType<UpdateTicketTool>(updateTicketTool);
+        Assert.Equal(
+            RiskLevel.Moderate,
+            updateTicketTool.Risk);
+        Assert.True(
+            updateTicketTool.RequiresApproval);
+
+        var vpnDiagnosticsTool =
+            toolRegistry.Get("Network.RunVpnDiagnostics");
+
+        Assert.NotNull(vpnDiagnosticsTool);
+        Assert.IsType<RunVpnDiagnosticsTool>(vpnDiagnosticsTool);
+        Assert.Equal(
+            RiskLevel.Safe,
+            vpnDiagnosticsTool.Risk);
+        Assert.False(
+            vpnDiagnosticsTool.RequiresApproval);
     }
 }
