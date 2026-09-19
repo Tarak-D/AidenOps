@@ -1,4 +1,5 @@
 using AIOps.Infrastructure.Integrations;
+using AIOps.Abstractions;
 using AIOps.Abstractions.Agents;
 using AIOps.Abstractions.Audit;
 using AIOps.Abstractions.Configuration;
