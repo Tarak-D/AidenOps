@@ -34,6 +34,7 @@ public static class DependencyInjection
 
         services.AddSingleton<IClock, SystemClock>();
         services.AddSingleton<ICloudProvider, SimulatedCloudProvider>();
+        services.AddSingleton<IDirectoryService, SimulatedDirectoryService>();
 
         var connectionString = config.GetConnectionString("PostgresConnection");
         if (!string.IsNullOrWhiteSpace(connectionString))

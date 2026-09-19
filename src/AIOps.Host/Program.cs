@@ -40,6 +40,10 @@ builder.Services.AddAIOpsSecurity(builder.Configuration);
 builder.Services.AddAIOpsInfrastructure(builder.Configuration);
 builder.Services.AddSingleton<ITool, GetInstanceStatusTool>();
 builder.Services.AddSingleton<ITool, RestartInstanceTool>();
+builder.Services.AddSingleton<ITool, ResetPasswordTool>();
+builder.Services.AddSingleton<ITool, GrantGroupAccessTool>();
+builder.Services.AddSingleton<ITool, UpdateTicketTool>();
+builder.Services.AddSingleton<ITool, RunVpnDiagnosticsTool>();
 builder.Services.AddSingleton<IToolRegistry, ToolRegistry>();
 
 // --- Application services (ticket lifecycle orchestration) ---
