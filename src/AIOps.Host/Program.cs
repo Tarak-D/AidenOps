@@ -1,3 +1,5 @@
+﻿using AIOps.Abstractions.Tools;
+using AIOps.Tools;
 using AIOps.Host.Api;
 using AIOps.Host.Components;
 using AIOps.Host.Hubs;
@@ -36,6 +38,8 @@ builder.Services.AddAIOpsSecurity(builder.Configuration);
 
 // --- Platform seams (in-memory dev implementations) ---
 builder.Services.AddAIOpsInfrastructure(builder.Configuration);
+builder.Services.AddSingleton<ITool, GetInstanceStatusTool>();
+builder.Services.AddSingleton<IToolRegistry, ToolRegistry>();
 
 // --- Application services (ticket lifecycle orchestration) ---
 builder.Services.AddScoped<AIOps.Orchestration.Tickets.TicketService>();
