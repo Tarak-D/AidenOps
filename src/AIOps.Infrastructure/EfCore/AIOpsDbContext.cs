@@ -1,17 +1,21 @@
 using AIOps.Abstractions.Audit;
 using AIOps.Abstractions.Evaluation;
+using AIOps.Domain.Entities;
 using Microsoft.EntityFrameworkCore;
 using Pgvector.EntityFrameworkCore;
 
 namespace AIOps.Infrastructure.EfCore;
 
-/// <summary>EF Core DbContext for audit and evaluation persistence.</summary>
+/// <summary>EF Core DbContext for audit, evaluation, action and approval persistence.</summary>
 public sealed class AIOpsDbContext : DbContext
 {
     public AIOpsDbContext(DbContextOptions<AIOpsDbContext> options) : base(options) { }
 
     public DbSet<AuditRecordEntity> AuditRecords { get; set; }
     public DbSet<EvaluationRecordEntity> EvaluationRuns { get; set; }
+
+    public DbSet<ActionExecution> ActionExecutions { get; set; }
+    public DbSet<ApprovalRequest> ApprovalRequests { get; set; }
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -53,6 +57,111 @@ public sealed class AIOpsDbContext : DbContext
             entity.HasIndex(e => e.ExperimentId);
             entity.HasIndex(e => e.ModelType);
             entity.HasIndex(e => e.StartedAt);
+        });
+
+        modelBuilder.Entity<ActionExecution>(entity =>
+        {
+            entity.ToTable("action_executions");
+            entity.HasKey(e => e.Id);
+
+            entity.Property(e => e.TicketId)
+                .HasColumnName("ticket_id");
+
+            entity.Property(e => e.ToolName)
+                .HasColumnName("tool_name")
+                .HasMaxLength(200)
+                .IsRequired();
+
+            entity.Property(e => e.ArgumentsJson)
+                .HasColumnName("arguments_json")
+                .IsRequired();
+
+            entity.Property(e => e.Risk)
+                .HasColumnName("risk")
+                .IsRequired();
+
+            entity.Property(e => e.RequiresApproval)
+                .HasColumnName("requires_approval")
+                .IsRequired();
+
+            entity.Property(e => e.ProposedBy)
+                .HasColumnName("proposed_by")
+                .HasMaxLength(200)
+                .IsRequired();
+
+            entity.Property(e => e.Reason)
+                .HasColumnName("reason");
+
+            entity.Property(e => e.Status)
+                .HasColumnName("status")
+                .IsRequired();
+
+            entity.Property(e => e.ResultSummary)
+                .HasColumnName("result_summary");
+
+            entity.Property(e => e.CreatedAt)
+                .HasColumnName("created_at")
+                .IsRequired();
+
+            entity.Property(e => e.ExecutedAt)
+                .HasColumnName("executed_at");
+
+            entity.HasIndex(e => e.TicketId);
+            entity.HasIndex(e => e.Status);
+            entity.HasIndex(e => e.CreatedAt);
+        });
+
+        modelBuilder.Entity<ApprovalRequest>(entity =>
+        {
+            entity.ToTable("approval_requests");
+            entity.HasKey(e => e.Id);
+
+            entity.Property(e => e.ActionExecutionId)
+                .HasColumnName("action_execution_id")
+                .IsRequired();
+
+            entity.Property(e => e.TicketId)
+                .HasColumnName("ticket_id")
+                .IsRequired();
+
+            entity.Property(e => e.RequestedBy)
+                .HasColumnName("requested_by")
+                .HasMaxLength(200)
+                .IsRequired();
+
+            entity.Property(e => e.Justification)
+                .HasColumnName("justification")
+                .IsRequired();
+
+            entity.Property(e => e.Status)
+                .HasColumnName("status")
+                .IsRequired();
+
+            entity.Property(e => e.CreatedAt)
+                .HasColumnName("created_at")
+                .IsRequired();
+
+            entity.Property(e => e.ExpiresAt)
+                .HasColumnName("expires_at")
+                .IsRequired();
+
+            entity.Property(e => e.DecidedBy)
+                .HasColumnName("decided_by")
+                .HasMaxLength(200);
+
+            entity.Property(e => e.DecidedAt)
+                .HasColumnName("decided_at");
+
+            entity.Property(e => e.DecisionComment)
+                .HasColumnName("decision_comment");
+
+            // An action execution may have exactly one approval request.
+            entity.HasIndex(e => e.ActionExecutionId)
+                .IsUnique();
+
+            entity.HasIndex(e => e.TicketId);
+            entity.HasIndex(e => e.Status);
+            entity.HasIndex(e => e.ExpiresAt);
         });
     }
 }

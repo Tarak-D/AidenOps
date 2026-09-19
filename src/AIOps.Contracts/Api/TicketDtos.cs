@@ -48,3 +48,23 @@ public sealed record TimelineEntryDto(
     string ActorId,
     string Kind,
     string Summary);
+
+public sealed record CreateApprovalRequest(
+    string Justification);
+
+public sealed record DecideApprovalRequest(
+    bool Approve,
+    string? Comment);
+
+public sealed record ApprovalResponse(
+    Guid Id,
+    Guid ActionExecutionId,
+    Guid TicketId,
+    string RequestedBy,
+    string Justification,
+    ApprovalStatus Status,
+    DateTimeOffset CreatedAt,
+    DateTimeOffset ExpiresAt,
+    string? DecidedBy,
+    DateTimeOffset? DecidedAt,
+    string? DecisionComment);
