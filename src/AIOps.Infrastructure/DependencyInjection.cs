@@ -1,7 +1,9 @@
+using AIOps.Infrastructure.Integrations;
 using AIOps.Abstractions.Agents;
 using AIOps.Abstractions.Audit;
 using AIOps.Abstractions.Configuration;
 using AIOps.Abstractions.Evaluation;
+using AIOps.Abstractions.Integrations;
 using AIOps.Abstractions.Persistence;
 using AIOps.Abstractions.Time;
 using AIOps.Infrastructure.Agents;
@@ -31,6 +33,7 @@ public static class DependencyInjection
         services.Configure<AgentPolicyOptions>(config.GetSection(AgentPolicyOptions.SectionName));
 
         services.AddSingleton<IClock, SystemClock>();
+        services.AddSingleton<ICloudProvider, SimulatedCloudProvider>();
 
         var connectionString = config.GetConnectionString("PostgresConnection");
         if (!string.IsNullOrWhiteSpace(connectionString))
