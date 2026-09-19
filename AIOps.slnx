@@ -14,6 +14,7 @@
     <Project Path="tests/AIOps.Api.Tests/AIOps.Api.Tests.csproj" />
     <Project Path="tests/AIOps.Domain.Tests/AIOps.Domain.Tests.csproj" />
     <Project Path="tests/AIOps.Grains.Tests/AIOps.Grains.Tests.csproj" />
+    <Project Path="tests/AIOps.Infrastructure.Tests/AIOps.Infrastructure.Tests.csproj" />
     <Project Path="tests/AIOps.Orchestration.Tests/AIOps.Orchestration.Tests.csproj" />
     <Project Path="tests/AIOps.Tools.Tests/AIOps.Tools.Tests.csproj" />
   </Folder>
