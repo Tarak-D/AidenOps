@@ -58,8 +58,8 @@ public static class DependencyInjection
                     connectionString,
                     npgsqlOptions => npgsqlOptions.UseVector()));
 
-            services.AddSingleton<IAuditStore, PostgresAuditStore>();
-            services.AddSingleton<IEvaluationStore, PostgresEvaluationStore>();
+            services.AddScoped<IAuditStore, PostgresAuditStore>();
+            services.AddScoped<IEvaluationStore, PostgresEvaluationStore>();
 
             // Phase 7: RAG / knowledge retrieval.
             services.AddScoped<IEmbeddingGenerator, DeterministicEmbeddingGenerator>();
