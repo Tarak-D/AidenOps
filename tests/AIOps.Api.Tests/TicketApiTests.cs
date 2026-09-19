@@ -209,11 +209,17 @@ public sealed class TicketApiTests : IClassFixture<WebApplicationFactory<Program
         Assert.NotNull(tool);
 
         Assert.IsType<GetInstanceStatusTool>(tool);
-
-        Assert.IsType<SimulatedCloudProvider>(cloudProvider);
-
+        var restartTool =
+        toolRegistry.Get("Cloud.RestartInstance");
+        Assert.NotNull(restartTool);
+        Assert.IsType<RestartInstanceTool>(restartTool);
         Assert.Equal(
-            "Cloud.GetInstanceStatus",
-            tool.Name);
+            RiskLevel.Moderate,
+            restartTool.Risk);
+            Assert.True(restartTool.RequiresApproval);
+            Assert.IsType<SimulatedCloudProvider>(cloudProvider);
+            Assert.Equal(
+                "Cloud.GetInstanceStatus",
+                tool.Name);
     }
 }

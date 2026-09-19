@@ -39,6 +39,7 @@ builder.Services.AddAIOpsSecurity(builder.Configuration);
 // --- Platform seams (in-memory dev implementations) ---
 builder.Services.AddAIOpsInfrastructure(builder.Configuration);
 builder.Services.AddSingleton<ITool, GetInstanceStatusTool>();
+builder.Services.AddSingleton<ITool, RestartInstanceTool>();
 builder.Services.AddSingleton<IToolRegistry, ToolRegistry>();
 
 // --- Application services (ticket lifecycle orchestration) ---
