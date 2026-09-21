@@ -1,51 +1,1082 @@
-# Autonomous IT Operations (AIOps) Agent Platform
+# AIOps Agent Swarm
 
-A production-oriented portfolio project demonstrating multi-agent **Agentic AI**, **Generative AI / RAG**,
-**data engineering**, and **full-stack .NET** engineering, built as a modular monolith:
+An enterprise-oriented AI operations platform for incident triage, knowledge retrieval, safe tool execution, human approval, agent evaluation, observability, and autonomous operational workflows.
 
-- **.NET 10 control plane** — ASP.NET Core, Orleans (stateful Ticket grains), PostgreSQL, SignalR, Blazor (MudBlazor), EF Core.
-- **Python AI agent layer (Phase 5+)** — LangGraph stateful workflows, LangChain components, NVIDIA hostedNIM
-  (`moonshotai/kimi-k3`, OpenAI-compatible), human-in-the-loop interrupts, guardrails.
-- **RAG / Knowledge Retrieval (Phase 7)** — knowledge documents and chunks, embedding abstraction,
-  deterministic local embeddings for development/testing, PostgreSQL + pgvector, cosine-similarity retrieval,
-  ranked knowledge results, and HNSW vector indexing.
-- **Data engineering (Phase 11+)** — batch + API ingestion, validation, normalization, dedup, analytics SQL, versioned datasets.
-- **Evaluation (Phase 12-13)** — versioned golden datasets, experiment tracking, classical ML baseline (TF-IDF + Logistic
-  Regression) vs LLM triage on the same benchmark. **No performance numbers are claimed unless a committed experiment produced them.**
+The project combines a .NET control plane with an eventual Python/LangGraph agent swarm and NVIDIA NIM/Nemotron model integration.
 
-## Current status: Phase 7 — RAG / Knowledge Retrieval
+## Project Status
 
-Phase 1–6 capabilities remain in place, with Phase 7 adding the foundational knowledge retrieval layer.
+### Current Phase
 
-### Phase 7 completed
+**Phase 8 — Agent Evaluation & Observability — COMPLETE**
 
-- Knowledge document abstraction.
-- Knowledge chunk abstraction.
-- PostgreSQL persistence for knowledge documents and chunks.
-- `pgvector` integration through EF Core.
-- Embedding generation abstraction via `IEmbeddingGenerator`.
-- Deterministic 64-dimensional local embedding implementation for development and testing.
-- Cosine-similarity vector search.
-- Ranked knowledge retrieval results.
-- PostgreSQL HNSW vector index using `vector_cosine_ops`.
-- Foreign-key relationship between documents and chunks with cascade deletion.
-- Unique document/chunk ordering constraint.
-- End-to-end PostgreSQL knowledge-store integration test.
-- Existing Phase 1–6 behavior preserved.
+```text
+Phase 1  — Foundation                         COMPLETE
+Phase 2  — Ticket Lifecycle                   COMPLETE
+Phase 3  — Persistence & Audit                COMPLETE
+Phase 4  — Tool Execution                     COMPLETE
+Phase 5  — Agent Gateway                      COMPLETE
+Phase 6  — Human Approval & Safety Controls   COMPLETE
+Phase 7  — RAG / Knowledge Retrieval          COMPLETE
+Phase 8  — Agent Evaluation & Observability  COMPLETE
+Phase 9  — Next
+```
 
-The Phase 7 RAG foundation follows this flow:
+### Current Checkpoint
+
+```text
+phase-8-complete
+```
+
+## 1. Vision
+
+AIOps Agent Swarm is designed as a controlled autonomous operations platform.
+
+The long-term goal is for an AI agent to:
+
+1. Receive an incident or ticket
+2. Understand and classify the incident
+3. Retrieve operational knowledge
+4. Reason about possible remediation
+5. Select an appropriate tool
+6. Validate the proposed action
+7. Determine whether approval is required
+8. Execute only permitted actions
+9. Observe the result
+10. Re-evaluate the incident
+11. Resolve or escalate the incident
+12. Record the complete execution history
+13. Evaluate whether the agent performed correctly
+
+Target flow:
+
+```text
+Incident / Ticket
+       ↓
+Ticket Grain
+       ↓
+Agent Run
+       ↓
+Triage
+       ↓
+Knowledge Retrieval
+       ↓
+Reasoning
+       ↓
+Tool Proposal
+       ↓
+Risk Classification
+       ↓
+Safe?
+   ┌───┴───┐
+   │       │
+  Yes      No
+   │       │
+   │    Approval Request
+   │       ↓
+   │    Human Review
+   │       ↓
+   └───→ Tool Execution
+             ↓
+        Result / Evidence
+             ↓
+      Agent Re-evaluation
+             ↓
+      Resolve / Escalate
+             ↓
+            Audit
+             ↓
+        Evaluation
+             ↓
+       UI / SignalR
+```
+
+## 2. Architecture
+
+```text
+┌─────────────────────────────────────────────┐
+│              ASP.NET Core / UI              │
+│        APIs · Dashboard · SignalR           │
+└──────────────────────┬──────────────────────┘
+                       │
+                       ▼
+┌─────────────────────────────────────────────┐
+│             .NET Control Plane              │
+│                                             │
+│  Orleans                                     │
+│  Ticket lifecycle                            │
+│  Agent orchestration                         │
+│  Approval / safety                           │
+│  Tool execution                              │
+│  Audit                                       │
+│  Evaluation                                  │
+└───────────────┬──────────────┬──────────────┘
+                │              │
+                ▼              ▼
+       ┌────────────────┐   ┌────────────────┐
+       │ PostgreSQL     │   │ RAG / Tools    │
+       │ + pgvector     │   │ integrations   │
+       └────────────────┘   └────────────────┘
+                │
+                ▼
+┌─────────────────────────────────────────────┐
+│          Python Agent Swarm                 │
+│          LangGraph orchestration            │
+└──────────────────────┬──────────────────────┘
+                       │
+                       ▼
+┌─────────────────────────────────────────────┐
+│          NVIDIA NIM / Nemotron              │
+│          and future model providers          │
+└─────────────────────────────────────────────┘
+```
+
+## 3. Technology Stack
+
+### .NET
+
+- .NET 10
+- ASP.NET Core
+- Orleans
+- Entity Framework Core
+- PostgreSQL
+- pgvector
+- xUnit
+- Moq
+
+### AI / Agent Layer
+
+Target architecture:
+
+- Python
+- LangGraph
+- NVIDIA NIM
+- Nemotron
+- Model-provider abstraction
+
+Development currently uses a deterministic in-process fake agent gateway so local development and tests do not require external model access.
+
+### Persistence
+
+- PostgreSQL
+- EF Core
+- pgvector
+- HNSW vector indexing
+- Audit records
+- Evaluation run persistence
+
+## 4. Repository Structure
+
+```text
+src/
+├── AIOps.Abstractions/
+├── AIOps.Contracts/
+├── AIOps.Domain/
+├── AIOps.Grains/
+├── AIOps.Host/
+├── AIOps.Infrastructure/
+├── AIOps.Orchestration/
+└── AIOps.Tools/
+
+tests/
+├── AIOps.Abstractions.Tests/
+├── AIOps.Api.Tests/
+├── AIOps.Domain.Tests/
+├── AIOps.Grains.Tests/
+├── AIOps.Infrastructure.Tests/
+├── AIOps.Orchestration.Tests/
+└── AIOps.Tools.Tests/
+```
+
+### AIOps.Abstractions
+
+Stable interfaces and cross-layer contracts.
+
+Examples:
+
+```text
+IAgentGateway
+IAuditStore
+IEvaluationStore
+IEmbeddingGenerator
+IKnowledgeStore
+```
+
+### AIOps.Contracts
+
+API and agent gateway DTOs.
+
+### AIOps.Domain
+
+Core domain models and lifecycle rules.
+
+### AIOps.Grains
+
+Orleans grains responsible for stateful ticket and operational workflows.
+
+### AIOps.Infrastructure
+
+Concrete infrastructure implementations:
+
+```text
+PostgreSQL
+EF Core
+Audit persistence
+Evaluation persistence
+Knowledge persistence
+Fake agent gateway
+External integration abstractions
+```
+
+### AIOps.Orchestration
+
+Application-level orchestration including agent evaluation.
+
+### AIOps.Tools
+
+Tool definitions and execution infrastructure.
+
+### AIOps.Host
+
+ASP.NET Core host and Orleans co-hosting.
+
+## 5. Development Environment
+
+The project is developed and tested on Windows using PowerShell and Visual Studio Code.
+
+Typical project location:
+
+```text
+D:\Project\AIOps.AgentSwarm
+```
+
+## 6. Build
+
+From the repository root:
+
+```powershell
+dotnet build AIOps.slnx
+```
+
+## 7. Test
+
+Run the complete test suite:
+
+```powershell
+dotnet test AIOps.slnx
+```
+
+For a faster run after a successful build:
+
+```powershell
+dotnet test AIOps.slnx --no-build
+```
+
+## 8. PostgreSQL
+
+PostgreSQL is used for persistent operational data.
+
+Primary areas include:
+
+```text
+Audit records
+Evaluation runs
+Action executions
+Approval requests
+Knowledge documents
+Knowledge chunks
+Vector embeddings
+```
+
+The knowledge retrieval layer uses PostgreSQL with pgvector.
+
+## 9. Audit
+
+Audit records are append-only by design.
+
+Audit information includes:
+
+```text
+CorrelationId
+ActorType
+ActorId
+EventType
+EntityType
+EntityId
+PayloadJson
+```
+
+The correlation ID allows agent activity to be associated across the operational workflow.
+
+## 10. Ticket Lifecycle
+
+Tickets are managed through Orleans-backed lifecycle logic.
+
+The platform models ticket states and validates transitions rather than allowing arbitrary state changes.
+
+The lifecycle provides the foundation for:
+
+```text
+Creation
+Triage
+Investigation
+Action execution
+Approval
+Resolution
+Escalation
+```
+
+## 11. Agent Gateway
+
+The .NET control plane communicates with agents through:
+
+```text
+IAgentGateway
+```
+
+The gateway exposes:
+
+```text
+StartRunAsync
+ResumeRunAsync
+```
+
+Agent requests contain:
+
+```text
+CorrelationId
+Ticket context
+Allowed tools
+Triage confidence threshold
+Maximum attempts
+```
+
+Agent results contain:
+
+```text
+Outcome
+Triage confidence
+Domain
+Severity
+Tool proposal
+Escalation summary
+Resolution summary
+Step trace
+Error
+```
+
+Tool proposals contain:
+
+```text
+Tool name
+Arguments JSON
+Confidence
+Justification
+```
+
+## 12. Deterministic Fake Agent
+
+Development and CI use:
+
+```text
+InProcessFakeAgentGateway
+```
+
+The fake gateway is deterministic and offline.
+
+It provides predictable classification for scenarios including:
+
+```text
+Network
+Identity
+Database
+Infrastructure
+Unknown
+```
+
+It also applies deterministic severity and tool-selection rules.
+
+This allows the control plane, approval flow, and evaluation system to be tested without an external LLM.
+
+## 13. Tool Execution
+
+Tool manifests describe:
+
+```text
+Name
+Description
+Risk level
+Approval requirement
+Input schema
+```
+
+Example tools include:
+
+```text
+Aws.RestartEc2Instance
+Network.RunVpnDiagnostics
+Identity.ResetPassword
+```
+
+The control plane determines whether a proposed tool is safe to execute immediately or requires human approval.
+
+## 14. Human Approval & Safety Controls
+
+The safety flow is:
+
+```text
+Agent
+  ↓
+ActionExecution
+  ↓
+ApprovalRequest
+  ↓
+Human
+  ↓
+Approve / Reject
+  ↓
+Server Validation
+  ↓
+Tool Executor
+  ↓
+Tool
+```
+
+Approval must be:
+
+```text
+Server-side
+Approved
+Unexpired
+Bound to the exact ActionExecution
+Bound to the exact Ticket
+```
+
+The AI agent cannot self-approve a risky action.
+
+Approval states:
+
+```text
+Pending
+Approved
+Rejected
+Expired
+```
+
+Action execution states:
+
+```text
+Proposed
+AwaitingApproval
+Approved
+Executing
+Succeeded
+Failed
+Rejected
+```
+
+## 15. RAG / Knowledge Retrieval
+
+Phase 7 introduced operational knowledge retrieval.
+
+Architecture:
 
 ```text
 Knowledge Document
-        ↓
-Document Chunks
-        ↓
-Embedding Vector
-        ↓
-PostgreSQL + pgvector
-        ↓
-Similarity Retrieval
-        ↓
-Ranked Knowledge Context
-        ↓
-Agent Gateway / Orchestrator
+       ↓
+Chunking
+       ↓
+Embedding
+       ↓
+pgvector
+       ↓
+Similarity Search
+       ↓
+Ranked Results
+       ↓
+Agent Context
+```
+
+Core concepts:
+
+```text
+KnowledgeDocument
+KnowledgeChunk
+KnowledgeSearchResult
+```
+
+## 16. Embeddings
+
+The retrieval layer is provider-independent.
+
+The current implementation uses a deterministic local embedding generator for development and testing.
+
+Current vector dimension:
+
+```text
+64
+```
+
+PostgreSQL stores embeddings using:
+
+```text
+vector(64)
+```
+
+The knowledge chunk table uses an HNSW index with cosine-distance operators.
+
+## 17. Knowledge Persistence
+
+Knowledge data is persisted through PostgreSQL.
+
+Primary tables:
+
+```text
+knowledge_documents
+knowledge_chunks
+```
+
+The knowledge chunk model includes:
+
+```text
+DocumentId
+ChunkIndex
+Content
+Metadata
+Embedding
+CreatedAt
+```
+
+Relationship:
+
+```text
+KnowledgeDocument
+       │
+       └── KnowledgeChunk
+              ├── Content
+              ├── Metadata
+              └── Embedding
+```
+
+## 18. Agent Evaluation & Observability
+
+### Phase 8
+
+Phase 8 introduces a deterministic evaluation framework for measuring agent behavior.
+
+Evaluation flow:
+
+```text
+Evaluation Dataset
+       ↓
+Evaluation Runner
+       ↓
+Agent Gateway
+       ↓
+Prediction
+       ↓
+Expected Result
+       ↓
+Metric Calculation
+       ↓
+EvaluationRun
+       ↓
+PostgreSQL
+```
+
+The purpose is to measure whether changes to agent behavior improve operational performance.
+
+## 19. Evaluation Metrics
+
+Phase 8 measures:
+
+```text
+Triage accuracy
+Domain classification accuracy
+Severity classification accuracy
+Tool selection accuracy
+Tool argument validity
+Approval rate
+Execution success rate
+Resolution rate
+Escalation rate
+Latency
+Prompt token usage
+Completion token usage
+Retrieval relevance
+```
+
+Metrics are calculated from individual evaluation case results.
+
+Latency is measured during evaluation execution.
+
+Token usage is aggregated from agent StepTrace records.
+
+Retrieval relevance is recorded when retrieval evaluation data is available.
+
+## 20. Agent Observability
+
+The existing `StepTrace` model provides the foundation for agent observability.
+
+Trace information includes:
+
+```text
+Agent
+Step name
+Model
+Prompt version
+Prompt tokens
+Completion tokens
+Latency
+Summary
+```
+
+Agent runs also preserve:
+
+```text
+CorrelationId
+```
+
+This allows multiple agent steps to be associated with one evaluation case.
+
+## 21. Evaluation Dataset
+
+Phase 8 contains seven deterministic incident scenarios:
+
+```text
+CPU spike
+Disk full
+VPN failure
+Password compromise
+Database unavailable
+Deployment failure
+Network outage
+```
+
+Each evaluation case specifies:
+
+```text
+Domain
+Severity
+Initial outcome
+Expected tool
+Expected resolution
+Approval requirement
+Allowed tools
+Triage confidence threshold
+Maximum attempts
+```
+
+Dataset name:
+
+```text
+phase-8-incident-evaluation
+```
+
+Dataset version:
+
+```text
+1.0
+```
+
+## 22. Evaluation Runner
+
+The evaluation runner executes each dataset case against the configured agent gateway.
+
+Process:
+
+```text
+Create evaluation case
+       ↓
+Start agent run
+       ↓
+Capture prediction
+       ↓
+Compare expected domain/severity/tool
+       ↓
+Calculate execution metrics
+       ↓
+Resume approval-required cases
+       ↓
+Capture final result
+       ↓
+Aggregate traces
+       ↓
+Calculate evaluation metrics
+       ↓
+Persist evaluation run
+```
+
+Approval-required evaluation cases use a synthetic successful tool result.
+
+The evaluation runner does not execute real external operations.
+
+This keeps the initial evaluation system safe and deterministic.
+
+## 23. Evaluation Persistence
+
+Evaluation runs use:
+
+```text
+IEvaluationStore
+```
+
+The PostgreSQL implementation is:
+
+```text
+PostgresEvaluationStore
+```
+
+Evaluation runs are stored in:
+
+```text
+evaluation_runs
+```
+
+Persisted information includes:
+
+```text
+Id
+ExperimentId
+ModelType
+ModelName
+PromptVersion
+DatasetName
+DatasetVersion
+ConfigJson
+SampleCount
+StartedAt
+FinishedAt
+MetricsJson
+Notes
+```
+
+## 24. Evaluation Repeatability
+
+The deterministic gateway allows the same evaluation dataset to be executed repeatedly without:
+
+```text
+External model APIs
+External tool systems
+Production infrastructure
+Network-dependent AI services
+```
+
+The evaluation tests verify that the important evaluation metrics remain stable across repeated runs.
+
+Runtime latency is treated as environment-dependent rather than as a deterministic equality assertion.
+
+## 25. Testing Strategy
+
+Tests are organized by architectural layer:
+
+```text
+AIOps.Domain.Tests
+AIOps.Abstractions.Tests
+AIOps.Orchestration.Tests
+AIOps.Infrastructure.Tests
+AIOps.Grains.Tests
+AIOps.Tools.Tests
+AIOps.Api.Tests
+```
+
+Phase 8 added evaluation tests covering:
+
+```text
+Evaluation metric calculation
+Evaluation runner execution
+Evaluation repeatability
+Evaluation run persistence
+Evaluation dataset structure
+Expected incident coverage
+Tool selection
+Tool argument validation
+```
+
+## 26. Phase History
+
+### Phase 1 — Foundation
+
+Initial platform foundation:
+
+```text
+Solution structure
+Domain
+Contracts
+Abstractions
+Host
+Initial Orleans integration
+Initial API foundation
+```
+
+### Phase 2 — Ticket Lifecycle
+
+```text
+Ticket creation
+Ticket retrieval
+Ticket lifecycle
+Domain validation
+Severity
+Status transitions
+```
+
+### Phase 3 — Persistence & Audit
+
+```text
+PostgreSQL
+EF Core
+Audit persistence
+Evaluation persistence contract
+Health checks
+```
+
+### Phase 4 — Tool Execution
+
+```text
+Tool contracts
+Tool manifests
+Tool execution
+Tool results
+Risk metadata
+Integration boundaries
+```
+
+### Phase 5 — Agent Gateway
+
+```text
+IAgentGateway
+AgentRunRequest
+AgentRunResult
+ToolProposal
+StepTrace
+Fake agent gateway
+Python/LangGraph gateway contract
+```
+
+### Phase 6 — Human Approval & Safety Controls
+
+```text
+ActionExecution
+ApprovalRequest
+Approval lifecycle
+Risk classification
+Server-side validation
+Approval API
+Audit events
+```
+
+Checkpoint:
+
+```text
+phase-6-complete
+```
+
+### Phase 7 — RAG / Knowledge Retrieval
+
+```text
+Knowledge documents
+Knowledge chunks
+Deterministic embeddings
+pgvector
+Cosine similarity
+HNSW index
+Knowledge persistence
+Knowledge search
+```
+
+Checkpoint:
+
+```text
+phase-7-complete
+```
+
+### Phase 8 — Agent Evaluation & Observability
+
+```text
+Evaluation cases
+Evaluation datasets
+Evaluation runner
+Evaluation metrics
+Agent trace aggregation
+Latency measurement
+Token measurement
+Tool validation
+Approval metrics
+Resolution metrics
+Escalation metrics
+Evaluation persistence
+Repeatability tests
+```
+
+Checkpoint:
+
+```text
+phase-8-complete
+```
+
+## 27. Development Commands
+
+### Build
+
+```powershell
+dotnet build AIOps.slnx
+```
+
+### Run all tests
+
+```powershell
+dotnet test AIOps.slnx
+```
+
+### Run all tests without rebuilding
+
+```powershell
+dotnet test AIOps.slnx --no-build
+```
+
+### Run orchestration tests
+
+```powershell
+dotnet test .\tests\AIOps.Orchestration.Tests\AIOps.Orchestration.Tests.csproj
+```
+
+### Check Git state
+
+```powershell
+git status
+```
+
+### View recent history
+
+```powershell
+git log --oneline --decorate -10
+```
+
+## 28. Development Principles
+
+### Stable abstractions
+
+Cross-layer communication should happen through stable interfaces and contracts.
+
+### Deterministic local development
+
+External AI services should not be required for the core test suite.
+
+### Safety before autonomy
+
+AI-generated actions must pass server-side policy and approval controls before consequential execution.
+
+### Audit important operations
+
+Important agent and operational actions should have correlation identifiers and persistent audit records.
+
+### Evaluation before model expansion
+
+New models, prompts, and agent behavior should be evaluated against a repeatable dataset.
+
+### Provider independence
+
+Model and embedding providers should remain replaceable behind abstractions.
+
+### No hidden execution
+
+An agent result should not imply that an external action actually occurred unless the control plane records the execution result.
+
+## 29. Future Direction
+
+Future work will build toward:
+
+```text
+Real Python/LangGraph agent service
+NVIDIA NIM integration
+Nemotron models
+Real RAG context injection into agent workflows
+Production tool integrations
+Advanced evaluation datasets
+Model comparison
+Prompt/version tracking
+Agent performance dashboards
+SignalR live execution views
+Continuous evaluation
+Agent improvement loops
+```
+
+The Phase 8 evaluation framework should remain as the regression baseline while these capabilities are introduced.
+
+## 30. Long-Term Autonomous Flow
+
+```text
+Incident
+   ↓
+Ticket
+   ↓
+Ticket Grain
+   ↓
+Agent Run
+   ↓
+Triage Agent
+   ↓
+Knowledge Agent
+   ↓
+Reasoning Agent
+   ↓
+Tool Selection
+   ↓
+Risk Classification
+   ↓
+Approval Decision
+   ↓
+Human Approval when required
+   ↓
+Tool Execution
+   ↓
+Execution Result
+   ↓
+Verification
+   ↓
+Agent Re-evaluation
+   ↓
+Resolution / Escalation
+   ↓
+Audit
+   ↓
+Evaluation
+   ↓
+Observability / UI
+```
+
+The system should remain controlled, observable, auditable, and testable as autonomy increases.
+
+## 31. Phase 9
+
+Phase 9 continues from the Phase 8 evaluation baseline.
+
+The following should be preserved as the regression foundation:
+
+```text
+Ticket lifecycle
+Orleans orchestration
+Tool execution
+Human approval
+Audit
+RAG persistence
+Evaluation dataset
+Evaluation metrics
+Evaluation runner
+```
+
+No completed phase should be reimplemented unless a later phase explicitly requires an architectural change.
+
+## 32. Checkpoint
+
+Current checkpoint:
+
+```text
+phase-8-complete
+```
+
+Next:
+
+```text
+Phase 9
+```
