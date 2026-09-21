@@ -2,13 +2,13 @@
 
 An enterprise-oriented AI operations platform for incident triage, knowledge retrieval, safe tool execution, human approval, agent evaluation, observability, and autonomous operational workflows.
 
-The project combines a .NET control plane with an eventual Python/LangGraph agent swarm and NVIDIA NIM/Nemotron model integration.
+The project combines a .NET control plane with a Python/LangGraph agent swarm and a future NVIDIA NIM/Nemotron model integration.
 
 ## Project Status
 
 ### Current Phase
 
-**Phase 8 — Agent Evaluation & Observability — COMPLETE**
+**Phase 9 — Python / LangGraph Agent Swarm — COMPLETE**
 
 ```text
 Phase 1  — Foundation                         COMPLETE
@@ -19,13 +19,14 @@ Phase 5  — Agent Gateway                      COMPLETE
 Phase 6  — Human Approval & Safety Controls   COMPLETE
 Phase 7  — RAG / Knowledge Retrieval          COMPLETE
 Phase 8  — Agent Evaluation & Observability  COMPLETE
-Phase 9  — Next
+Phase 9  — Python / LangGraph Agent Swarm     COMPLETE
+Phase 10 — NVIDIA NIM / Nemotron Integration  Next
 ```
 
 ### Current Checkpoint
 
 ```text
-phase-8-complete
+phase-9-complete
 ```
 
 ## 1. Vision
@@ -1047,36 +1048,342 @@ Observability / UI
 
 The system should remain controlled, observable, auditable, and testable as autonomy increases.
 
-## 31. Phase 9
+## 31. Phase 9 — Python / LangGraph Agent Swarm
 
-Phase 9 continues from the Phase 8 evaluation baseline.
+Phase 9 introduced the real Python agent-service boundary while keeping the .NET control plane authoritative.
 
-The following should be preserved as the regression foundation:
+Architecture:
 
 ```text
-Ticket lifecycle
-Orleans orchestration
-Tool execution
-Human approval
-Audit
-RAG persistence
-Evaluation dataset
-Evaluation metrics
-Evaluation runner
+.NET Control Plane
+       ↓ HTTP
+Python Agent Service
+       ↓
+FastAPI
+       ↓
+LangGraph
+       ↓
+Triage → Knowledge → Investigation → Decision
+       ↓
+Agent Result
+       ↓ HTTP
+.NET Control Plane
 ```
 
-No completed phase should be reimplemented unless a later phase explicitly requires an architectural change.
+The Python service is located under:
 
-## 32. Checkpoint
+```text
+python/
+├── requirements.txt
+└── agent_service/
+    ├── main.py
+    ├── graph.py
+    ├── agents/
+    │   └── triage.py
+    ├── models/
+    │   └── agent.py
+    ├── retrieval/
+    │   └── service.py
+    └── tests/
+        ├── test_graph.py
+        ├── test_health.py
+        └── test_triage.py
+```
+
+### Python Agent Service
+
+The service exposes:
+
+```text
+GET  /health
+POST /api/v1/agent/runs
+POST /api/v1/agent/runs/resume
+```
+
+The current LangGraph workflow is:
+
+```text
+START
+  ↓
+Triage
+  ↓
+Knowledge
+  ↓
+Investigation
+  ↓
+Decision
+  ├── resolve → END
+  └── escalate → END
+```
+
+The current implementation uses deterministic/bootstrap reasoning so the service remains offline-testable. NVIDIA NIM/Nemotron integration remains a future phase.
+
+### .NET Agent Gateway
+
+The existing `IAgentGateway` contract is reused for the Python boundary:
+
+```text
+IAgentGateway
+├── StartRunAsync
+└── ResumeRunAsync
+```
+
+`PythonAgentGateway` translates between the .NET agent contracts and the Python HTTP API.
+
+The gateway is selected through:
+
+```json
+{
+  "AI": {
+    "AgentGatewayMode": "Fake"
+  }
+}
+```
+
+Supported modes:
+
+```text
+Fake  → deterministic in-process gateway
+Http  → Python/LangGraph agent service
+```
+
+The default remains `Fake` so the normal development and CI test suite does not require the Python service or external model access.
+
+### Control-plane authority
+
+Python agents can:
+
+```text
+Reason
+Retrieve knowledge
+Investigate
+Propose outcomes/actions
+Return step traces
+```
+
+Python agents cannot independently:
+
+```text
+Approve actions
+Execute privileged .NET tools
+Change approval state
+Bypass server-side policy
+Directly mutate ticket lifecycle state
+```
+
+The .NET control plane remains authoritative for safety, approval, execution, audit, and ticket state.
+
+### Phase 9 Verification
+
+Python test suite:
+
+```text
+9 passed
+1 warning
+```
+
+The warning is an upstream Starlette/AnyIO deprecation warning and does not represent an application test failure.
+
+.NET regression suite:
+
+```text
+140 total
+0 failed
+140 succeeded
+0 skipped
+```
+
+End-to-end HTTP smoke test:
+
+```text
+.NET Orchestrator
+    ↓
+PythonAgentGateway
+    ↓ HTTP
+Python FastAPI
+    ↓
+LangGraph
+    ↓
+Agent result
+    ↓ HTTP
+.NET Orchestrator
+```
+
+Result:
+
+```text
+1 passed
+```
+
+The temporary HTTP integration test was removed after verification, and the default gateway configuration was restored to `Fake`.
+
+### Phase 9 Checkpoint
+
+```text
+phase-9-complete
+```
+
+## 32. Current Checkpoint
 
 Current checkpoint:
 
 ```text
-phase-8-complete
+phase-9-complete
 ```
 
 Next:
 
 ```text
-Phase 9
+Phase 10 — NVIDIA NIM / Nemotron Integration
 ```
+
+## 33. Development Commands
+
+### Build
+
+```powershell
+dotnet build AIOps.slnx
+```
+
+### Run all .NET tests
+
+```powershell
+dotnet test AIOps.slnx
+```
+
+### Run all .NET tests without rebuilding
+
+```powershell
+dotnet test AIOps.slnx --no-build
+```
+
+### Run orchestration tests
+
+```powershell
+dotnet test .\tests\AIOps.Orchestration.Tests\AIOps.Orchestration.Tests.csproj
+```
+
+### Run Python tests
+
+From the Python service directory:
+
+```powershell
+Set-Location .\python
+.\.venv\Scripts\Activate.ps1
+python -m pytest
+```
+
+### Run the Python agent service
+
+```powershell
+Set-Location .\python
+.\.venv\Scripts\Activate.ps1
+uvicorn agent_service.main:app --host 127.0.0.1 --port 8000
+```
+
+### Check Python health
+
+```powershell
+Invoke-RestMethod http://127.0.0.1:8000/health
+```
+
+### Check Git state
+
+```powershell
+git status
+```
+
+### View recent history
+
+```powershell
+git log --oneline --decorate -10
+```
+
+## 34. Remaining Roadmap
+
+The next phases build on the Phase 9 checkpoint:
+
+```text
+Phase 10 — NVIDIA NIM / Nemotron integration
+Phase 11 — Real RAG context integration
+Phase 12 — Full autonomous tool proposal/re-evaluation loop
+Phase 13 — Approval/resume integration
+Phase 14 — End-to-end autonomous operational workflow
+Phase 15 — Reliability, security, evaluation, and production hardening
+```
+
+The deterministic Python workflow and the Phase 8 evaluation framework should remain regression baselines while model-backed autonomy is introduced.
+
+## 35. Development Principles
+
+### Stable abstractions
+
+Cross-layer communication should happen through stable interfaces and contracts.
+
+### Deterministic local development
+
+External AI services should not be required for the core test suite.
+
+### Safety before autonomy
+
+AI-generated actions must pass server-side policy and approval controls before consequential execution.
+
+### Audit important operations
+
+Important agent and operational actions should have correlation identifiers and persistent audit records.
+
+### Evaluation before model expansion
+
+New models, prompts, and agent behavior should be evaluated against a repeatable dataset.
+
+### Provider independence
+
+Model and embedding providers should remain replaceable behind abstractions.
+
+### No hidden execution
+
+An agent result should not imply that an external action actually occurred unless the control plane records the execution result.
+
+## 36. Long-Term Autonomous Flow
+
+```text
+Incident
+   ↓
+Ticket
+   ↓
+Ticket Grain
+   ↓
+Agent Run
+   ↓
+Triage Agent
+   ↓
+Knowledge Agent
+   ↓
+Reasoning Agent
+   ↓
+Tool Selection
+   ↓
+Risk Classification
+   ↓
+Approval Decision
+   ↓
+Human Approval when required
+   ↓
+Tool Execution
+   ↓
+Execution Result
+   ↓
+Verification
+   ↓
+Agent Re-evaluation
+   ↓
+Resolution / Escalation
+   ↓
+Audit
+   ↓
+Evaluation
+   ↓
+Observability / UI
+```
+
+The system should remain controlled, observable, auditable, and testable as autonomy increases.
