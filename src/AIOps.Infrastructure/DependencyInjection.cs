@@ -1,4 +1,3 @@
-using AIOps.Infrastructure.Integrations;
 using AIOps.Abstractions;
 using AIOps.Abstractions.Agents;
 using AIOps.Abstractions.Audit;
@@ -12,6 +11,7 @@ using AIOps.Infrastructure.Agents;
 using AIOps.Infrastructure.Audit;
 using AIOps.Infrastructure.EfCore;
 using AIOps.Infrastructure.Evaluation;
+using AIOps.Infrastructure.Integrations;
 using AIOps.Infrastructure.Knowledge;
 using AIOps.Infrastructure.Persistence;
 using AIOps.Infrastructure.Time;
@@ -27,7 +27,7 @@ public static class DependencyInjection
     /// <summary>
     /// Registers development implementations of all platform seams.
     /// Phase 3: persistence is EF Core + PostgreSQL for audit and evaluation.
-    /// Phase 5: swap the agent gateway to the Python/LangGraph HTTP service based on configuration (AI:AgentGatewayMode).
+    /// Phase 5: swap the agent gateway to the Python/LangGraph HTTP service based on configuration.
     /// </summary>
     public static IServiceCollection AddAIOpsInfrastructure(
         this IServiceCollection services,
@@ -53,21 +53,36 @@ public static class DependencyInjection
 
         if (!string.IsNullOrWhiteSpace(connectionString))
         {
-            services.AddDbContext<AIOpsDbContext>(options =>
-                options.UseNpgsql(
-                    connectionString,
-                    npgsqlOptions => npgsqlOptions.UseVector()));
+            services.AddDbContext<AIOpsDbContext>(
+                options =>
+                    options.UseNpgsql(
+                        connectionString,
+                        npgsqlOptions =>
+                            npgsqlOptions.UseVector()));
 
             services.AddScoped<IAuditStore, PostgresAuditStore>();
             services.AddScoped<IEvaluationStore, PostgresEvaluationStore>();
 
             // Phase 7: RAG / knowledge retrieval.
-            services.AddScoped<IEmbeddingGenerator, DeterministicEmbeddingGenerator>();
-            services.AddScoped<IKnowledgeStore, PostgresKnowledgeStore>();
+            services.AddScoped<
+                IEmbeddingGenerator,
+                DeterministicEmbeddingGenerator>();
 
-            services.AddScoped<IActionExecutionStore, PostgresActionExecutionStore>();
-            services.AddScoped<IApprovalStore, PostgresApprovalStore>();
-            services.AddScoped<IApprovalValidator, PostgresApprovalStore>();
+            services.AddScoped<
+                IKnowledgeStore,
+                PostgresKnowledgeStore>();
+
+            services.AddScoped<
+                IActionExecutionStore,
+                PostgresActionExecutionStore>();
+
+            services.AddScoped<
+                IApprovalStore,
+                PostgresApprovalStore>();
+
+            services.AddScoped<
+                IApprovalValidator,
+                PostgresApprovalStore>();
 
             services.AddHealthChecks()
                 .AddNpgSql(connectionString);
@@ -91,14 +106,40 @@ public static class DependencyInjection
                 "Http",
                 StringComparison.OrdinalIgnoreCase))
         {
-            // Phase 5: HttpAgentGateway targeting the Python/LangGraph service.
-            throw new NotSupportedException(
-                "AI:AgentGatewayMode=Http is not available until Phase 5. Use 'Fake'.");
-        }
+            services.AddHttpClient<
+                IAgentGateway,
+                PythonAgentGateway>(
+                (serviceProvider, client) =>
+                {
+                    var options =
+                        serviceProvider
+                            .GetRequiredService<
+                                Microsoft.Extensions.Options.IOptions<AIOptions>>()
+                            .Value;
 
-        services.AddSingleton<
-            IAgentGateway,
-            InProcessFakeAgentGateway>();
+                    if (!Uri.TryCreate(
+                            options.AgentService.BaseUrl,
+                            UriKind.Absolute,
+                            out var baseUri))
+                    {
+                        throw new InvalidOperationException(
+                            $"AI:AgentService:BaseUrl is invalid: " +
+                            $"{options.AgentService.BaseUrl}");
+                    }
+
+                    client.BaseAddress = baseUri;
+
+                    client.Timeout =
+                        TimeSpan.FromSeconds(
+                            options.AgentService.TimeoutSeconds);
+                });
+        }
+        else
+        {
+            services.AddSingleton<
+                IAgentGateway,
+                InProcessFakeAgentGateway>();
+        }
 
         return services;
     }
