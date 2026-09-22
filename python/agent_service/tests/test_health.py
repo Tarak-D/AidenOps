@@ -15,12 +15,23 @@ def test_health():
     }
 
 
-def test_agent_run_network_uses_langgraph():
+def test_agent_run_network_uses_langgraph(
+    monkeypatch,
+):
+    monkeypatch.setenv(
+        "AGENT_LLM_PROVIDER",
+        "deterministic",
+    )
+
     response = client.post(
         "/api/v1/agent/runs",
         json={
-            "correlation_id": "00000000-0000-0000-0000-000000000001",
-            "ticket_id": "00000000-0000-0000-0000-000000000002",
+            "correlation_id": (
+                "00000000-0000-0000-0000-000000000001"
+            ),
+            "ticket_id": (
+                "00000000-0000-0000-0000-000000000002"
+            ),
             "title": "VPN failure",
             "description": "The corporate VPN is down.",
             "reporter_email": "test@example.com",
@@ -63,12 +74,23 @@ def test_agent_run_network_uses_langgraph():
     assert body["trace"][4]["step"] == "resolve"
 
 
-def test_agent_run_unknown_escalates():
+def test_agent_run_unknown_escalates(
+    monkeypatch,
+):
+    monkeypatch.setenv(
+        "AGENT_LLM_PROVIDER",
+        "deterministic",
+    )
+
     response = client.post(
         "/api/v1/agent/runs",
         json={
-            "correlation_id": "00000000-0000-0000-0000-000000000003",
-            "ticket_id": "00000000-0000-0000-0000-000000000004",
+            "correlation_id": (
+                "00000000-0000-0000-0000-000000000003"
+            ),
+            "ticket_id": (
+                "00000000-0000-0000-0000-000000000004"
+            ),
             "title": "Something strange",
             "description": "The issue is not recognized.",
         },
@@ -94,15 +116,17 @@ def test_agent_run_unknown_escalates():
     assert body["trace"][2]["agent"] == "InvestigationAgent"
     assert body["trace"][3]["agent"] == "DecisionAgent"
     assert body["trace"][4]["step"] == "escalate"
+
+
 def test_agent_run_resume_success():
     response = client.post(
         "/api/v1/agent/runs/resume",
         json={
             "correlation_id": (
-                "00000000-0000-0000-000000000005"
+                "00000000-0000-0000-0000-000000000005"
             ),
             "ticket_id": (
-                "00000000-0000-0000-000000000006"
+                "00000000-0000-0000-0000-000000000006"
             ),
             "approval_granted": True,
             "approval_decided_by": "test-user",
@@ -128,7 +152,7 @@ def test_agent_run_resume_failure():
                 "00000000-0000-0000-000000000007"
             ),
             "ticket_id": (
-                "00000000-0000-0000-000000000008"
+                "00000000-0000-0000-0000-000000000008"
             ),
             "approval_granted": False,
             "approval_decided_by": "test-user",

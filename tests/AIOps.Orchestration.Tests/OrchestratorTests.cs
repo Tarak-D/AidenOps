@@ -20,6 +20,7 @@ public sealed class OrchestratorTests
         var correlationId = Guid.NewGuid();
 
         var grain = new Mock<ITicketGrain>();
+
         grain.Setup(x => x.GetState())
             .ReturnsAsync(new TicketState
             {
@@ -29,11 +30,13 @@ public sealed class OrchestratorTests
             });
 
         var cluster = new Mock<IClusterClient>();
+
         cluster
             .Setup(x => x.GetGrain<ITicketGrain>(ticketId, null))
             .Returns(grain.Object);
 
         var gateway = new Mock<IAgentGateway>();
+
         var expectedResult = new AgentRunResult(
             AgentRunOutcome.AwaitingApproval,
             0.92,
@@ -46,7 +49,9 @@ public sealed class OrchestratorTests
             null);
 
         gateway
-            .Setup(x => x.StartRunAsync(It.IsAny<AgentRunRequest>(), It.IsAny<CancellationToken>()))
+            .Setup(x => x.StartRunAsync(
+                It.IsAny<AgentRunRequest>(),
+                It.IsAny<CancellationToken>()))
             .ReturnsAsync(expectedResult);
 
         var audit = new Mock<IAuditStore>();
@@ -72,11 +77,18 @@ public sealed class OrchestratorTests
             gateway.Object,
             NullLogger<Orchestrator>.Instance);
 
-        var result = await orchestrator.StartAgentRunAsync(ticketId, request);
+        var result = await orchestrator.StartAgentRunAsync(
+            ticketId,
+            request);
 
-        Assert.Equal(AgentRunOutcome.AwaitingApproval, result.Outcome);
+        Assert.Equal(
+            AgentRunOutcome.AwaitingApproval,
+            result.Outcome);
+
         gateway.Verify(
-            x => x.StartRunAsync(request, It.IsAny<CancellationToken>()),
+            x => x.StartRunAsync(
+                request,
+                It.IsAny<CancellationToken>()),
             Times.Once);
 
         audit.Verify(
@@ -96,10 +108,15 @@ public sealed class OrchestratorTests
         var ticketId = Guid.NewGuid();
 
         var grain = new Mock<ITicketGrain>();
+
         grain.Setup(x => x.GetState())
-            .ReturnsAsync(new TicketState { Exists = false });
+            .ReturnsAsync(new TicketState
+            {
+                Exists = false
+            });
 
         var cluster = new Mock<IClusterClient>();
+
         cluster
             .Setup(x => x.GetGrain<ITicketGrain>(ticketId, null))
             .Returns(grain.Object);
@@ -129,10 +146,14 @@ public sealed class OrchestratorTests
             NullLogger<Orchestrator>.Instance);
 
         await Assert.ThrowsAsync<DomainInvariantViolationException>(
-            () => orchestrator.StartAgentRunAsync(ticketId, request));
+            () => orchestrator.StartAgentRunAsync(
+                ticketId,
+                request));
 
         gateway.Verify(
-            x => x.StartRunAsync(It.IsAny<AgentRunRequest>(), It.IsAny<CancellationToken>()),
+            x => x.StartRunAsync(
+                It.IsAny<AgentRunRequest>(),
+                It.IsAny<CancellationToken>()),
             Times.Never);
 
         audit.Verify(
@@ -149,6 +170,7 @@ public sealed class OrchestratorTests
         var correlationId = Guid.NewGuid();
 
         var grain = new Mock<ITicketGrain>();
+
         grain.Setup(x => x.GetState())
             .ReturnsAsync(new TicketState
             {
@@ -158,11 +180,13 @@ public sealed class OrchestratorTests
             });
 
         var cluster = new Mock<IClusterClient>();
+
         cluster
             .Setup(x => x.GetGrain<ITicketGrain>(ticketId, null))
             .Returns(grain.Object);
 
         var gateway = new Mock<IAgentGateway>();
+
         var expectedResult = new AgentRunResult(
             AgentRunOutcome.Resolved,
             0.99,
@@ -175,7 +199,9 @@ public sealed class OrchestratorTests
             null);
 
         gateway
-            .Setup(x => x.ResumeRunAsync(It.IsAny<ResumeAgentRunRequest>(), It.IsAny<CancellationToken>()))
+            .Setup(x => x.ResumeRunAsync(
+                It.IsAny<ResumeAgentRunRequest>(),
+                It.IsAny<CancellationToken>()))
             .ReturnsAsync(expectedResult);
 
         var audit = new Mock<IAuditStore>();
@@ -194,12 +220,17 @@ public sealed class OrchestratorTests
             gateway.Object,
             NullLogger<Orchestrator>.Instance);
 
-        var result = await orchestrator.ResumeAgentRunAsync(request);
+        var result = await orchestrator.ResumeAgentRunAsync(
+            request);
 
-        Assert.Equal(AgentRunOutcome.Resolved, result.Outcome);
+        Assert.Equal(
+            AgentRunOutcome.Resolved,
+            result.Outcome);
 
         gateway.Verify(
-            x => x.ResumeRunAsync(request, It.IsAny<CancellationToken>()),
+            x => x.ResumeRunAsync(
+                request,
+                It.IsAny<CancellationToken>()),
             Times.Once);
 
         audit.Verify(
@@ -212,5 +243,4 @@ public sealed class OrchestratorTests
                 It.IsAny<CancellationToken>()),
             Times.Once);
     }
-
 }

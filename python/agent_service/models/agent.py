@@ -1,33 +1,32 @@
-from pydantic import BaseModel, Field
+from dataclasses import dataclass
 
 
-class ToolProposal(BaseModel):
-    tool_name: str
-    arguments_json: str
-    confidence: float
-    justification: str
-
-
-class AgentTrace(BaseModel):
-    agent: str
-    step_name: str
-    model: str
-    prompt_version: str
-    prompt_tokens: int = 0
-    completion_tokens: int = 0
-    latency_ms: float = 0.0
-    summary: str = ""
-
-
-class TriageResult(BaseModel):
+@dataclass(frozen=True)
+class TriageResult:
     domain: str
     severity: str
     confidence: float
 
 
-class AgentResult(BaseModel):
-    outcome: str
-    triage: TriageResult
-    tool_proposal: ToolProposal | None = None
-    trace: list[AgentTrace] = Field(default_factory=list)
-    error: str | None = None
+@dataclass(frozen=True)
+class StepTrace:
+    agent: str
+    step_name: str
+    model: str
+    prompt_version: str
+    prompt_tokens: int
+    completion_tokens: int
+    latency_ms: float
+    summary: str
+
+
+@dataclass(frozen=True)
+class AgentTrace:
+    agent: str
+    step_name: str
+    model: str
+    prompt_version: str
+    summary: str
+    prompt_tokens: int = 0
+    completion_tokens: int = 0
+    latency_ms: float = 0.0
