@@ -29,9 +29,7 @@ def _deterministic_triage(
     title: str,
     description: str,
 ) -> tuple[TriageResult, StepTrace]:
-    text = (
-        f"{title} {description}"
-    ).lower()
+    text = f"{title} {description}".lower()
 
     if (
         "vpn" in text
@@ -39,19 +37,23 @@ def _deterministic_triage(
         or "wifi" in text
     ):
         domain = "Network"
+
     elif (
         "password" in text
         or "login" in text
         or "access" in text
         or "locked" in text
+        or "authentication" in text
     ):
         domain = "Identity"
+
     elif (
         "database" in text
         or "sql" in text
         or "query" in text
     ):
         domain = "Database"
+
     elif (
         "server" in text
         or "disk" in text
@@ -59,12 +61,14 @@ def _deterministic_triage(
         or "ec2" in text
     ):
         domain = "Infrastructure"
+
     else:
         domain = "Unknown"
 
     if domain == "Unknown":
         severity = "P3"
         confidence = 0.35
+
     else:
         if (
             "down" in text
@@ -72,15 +76,20 @@ def _deterministic_triage(
             or "production" in text
         ):
             severity = "P1"
+
         elif (
             "urgent" in text
             or "cannot work" in text
+            or "cannot connect" in text
+            or "slow" in text
+            or "intermittent" in text
         ):
             severity = "P2"
+
         else:
             severity = "P3"
 
-        confidence = 0.85
+        confidence = 0.75
 
     result = TriageResult(
         domain=domain,
@@ -89,8 +98,8 @@ def _deterministic_triage(
     )
 
     trace = StepTrace(
-        agent="TriageAgent",
-        step_name="triage",
+        agent="triage",
+        step_name="deterministic_triage",
         model="deterministic/bootstrap",
         prompt_version="v0-deterministic",
         prompt_tokens=0,
@@ -172,6 +181,72 @@ Do not include explanations, markdown, or additional fields.
 """.strip()
 
 
+def _triage_response_format(
+    provider: str,
+) -> dict:
+    """
+    Return the structured-output configuration.
+
+    OpenRouter uses strict JSON Schema.
+    Other providers continue using JSON object mode.
+    """
+
+    if provider == "openrouter":
+        return {
+            "type": "json_schema",
+            "json_schema": {
+                "name": "aidenops_triage",
+                "strict": True,
+                "schema": {
+                    "type": "object",
+                    "properties": {
+                        "domain": {
+                            "type": "string",
+                            "enum": [
+                                "Network",
+                                "Identity",
+                                "Database",
+                                "Infrastructure",
+                                "Unknown",
+                            ],
+                            "description": (
+                                "The incident domain."
+                            ),
+                        },
+                        "severity": {
+                            "type": "string",
+                            "enum": [
+                                "P1",
+                                "P2",
+                                "P3",
+                            ],
+                            "description": (
+                                "The incident severity."
+                            ),
+                        },
+                        "confidence": {
+                            "type": "number",
+                            "description": (
+                                "Classification confidence "
+                                "from 0.0 to 1.0."
+                            ),
+                        },
+                    },
+                    "required": [
+                        "domain",
+                        "severity",
+                        "confidence",
+                    ],
+                    "additionalProperties": False,
+                },
+            },
+        }
+
+    return {
+        "type": "json_object",
+    }
+
+
 def _llm_triage(
     title: str,
     description: str,
@@ -198,26 +273,18 @@ Incident description:
         user_prompt=user_prompt,
         temperature=0.0,
         max_tokens=512,
-        response_format={
-            "type": "json_object",
-        },
+        response_format=_triage_response_format(
+            provider
+        ),
     )
 
     parsed = parse_json_object(
         response.content,
     )
 
-    domain = parsed.get(
-        "domain",
-    )
-
-    severity = parsed.get(
-        "severity",
-    )
-
-    confidence = parsed.get(
-        "confidence",
-    )
+    domain = parsed.get("domain")
+    severity = parsed.get("severity")
+    confidence = parsed.get("confidence")
 
     if domain not in _SUPPORTED_DOMAINS:
         raise ValueError(
@@ -254,12 +321,10 @@ Incident description:
     )
 
     trace = StepTrace(
-        agent="TriageAgent",
-        step_name="triage",
+        agent="triage",
+        step_name="llm_triage",
         model=response.model,
-        prompt_version=(
-            f"v1-{provider}-triage"
-        ),
+        prompt_version=f"v1-{provider}-triage",
         prompt_tokens=response.prompt_tokens,
         completion_tokens=response.completion_tokens,
         latency_ms=response.latency_ms,
@@ -276,25 +341,42 @@ Incident description:
 
 
 def triage_ticket(
-    title: str,
-    description: str,
+    incident: str | None = None,
+    *,
+    title: str | None = None,
+    description: str | None = None,
 ) -> tuple[TriageResult, StepTrace]:
     """
     Triage an incident using the configured LLM provider.
 
-    Provider configuration:
+    Supports both the original single-incident API:
 
-      AGENT_LLM_PROVIDER=deterministic
-      AGENT_LLM_PROVIDER=nvidia
-      AGENT_LLM_PROVIDER=openrouter
-      AGENT_LLM_PROVIDER=openai
-      AGENT_LLM_PROVIDER=anthropic
-      AGENT_LLM_PROVIDER=google
-      AGENT_LLM_PROVIDER=azure_openai
+        triage_ticket("Production network outage...")
+
+    and the title/description API:
+
+        triage_ticket(
+            title="VPN failure",
+            description="The corporate VPN is down.",
+        )
 
     Deterministic mode remains the default so CI and local
     development do not require external model credentials.
     """
+
+    if incident is not None:
+        if title is None:
+            title = incident
+        elif description is None:
+            description = incident
+
+    title = title or ""
+    description = description or ""
+
+    if not title and not description:
+        raise ValueError(
+            "An incident, title, or description is required."
+        )
 
     provider = os.getenv(
         "AGENT_LLM_PROVIDER",
@@ -321,9 +403,10 @@ def triage_ticket(
     if provider not in supported_providers:
         raise RuntimeError(
             "LLM triage failed: unsupported "
-            f"AGENT_LLM_PROVIDER='{provider}'. Expected one of: "
-            "deterministic, nvidia, openrouter, openai, "
-            "anthropic, google, azure_openai."
+            f"AGENT_LLM_PROVIDER='{provider}'. "
+            "Expected one of: deterministic, nvidia, "
+            "openrouter, openai, anthropic, google, "
+            "azure_openai."
         )
 
     normalized_provider = (
@@ -341,6 +424,7 @@ def triage_ticket(
             description=description,
             provider=normalized_provider,
         )
+
     except Exception as exc:
         raise RuntimeError(
             "LLM triage failed for provider "

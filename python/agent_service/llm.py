@@ -321,6 +321,9 @@ class OpenRouterClient(OpenAICompatibleClient):
 
     Default endpoint:
       https://openrouter.ai/api/v1
+
+    OpenRouter-specific routing requires the selected
+    provider to support all requested parameters.
     """
 
     def __init__(
@@ -369,6 +372,11 @@ class OpenRouterClient(OpenAICompatibleClient):
                     "OPENROUTER_X_TITLE",
                     "AidenOps AgentSwarm",
                 ),
+            },
+            extra_payload={
+                "provider": {
+                    "require_parameters": True,
+                },
             },
         )
 
@@ -627,10 +635,6 @@ class AnthropicClient:
             "max_tokens": max_tokens,
         }
 
-        # Anthropic's native API has provider/model-specific
-        # sampling behavior. Keep the common interface but do
-        # not force temperature into requests for models where
-        # it is not accepted.
         if temperature != 0.0:
             payload["temperature"] = temperature
 

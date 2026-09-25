@@ -1,3 +1,5 @@
+import json
+
 import httpx
 import pytest
 
@@ -250,6 +252,186 @@ def test_nvidia_nim_client_parses_chat_completion(
     assert result.latency_ms >= 0.0
 
 
+def test_openrouter_client_parses_chat_completion(
+    monkeypatch,
+) -> None:
+    monkeypatch.setenv(
+        "OPENROUTER_HTTP_REFERER",
+        "https://example.test/aidenops",
+    )
+
+    monkeypatch.setenv(
+        "OPENROUTER_X_TITLE",
+        "AidenOps AgentSwarm",
+    )
+
+    def handler(
+        request: httpx.Request,
+    ) -> httpx.Response:
+        assert request.method == "POST"
+
+        assert str(request.url) == (
+            "https://example.test/v1/chat/completions"
+        )
+
+        assert request.headers["Authorization"] == (
+            "Bearer test-key"
+        )
+
+        assert request.headers["HTTP-Referer"] == (
+            "https://example.test/aidenops"
+        )
+
+        assert request.headers["X-Title"] == (
+            "AidenOps AgentSwarm"
+        )
+
+        body = request.read().decode("utf-8")
+
+        assert '"model":"test-model"' in body
+        assert '"temperature":0.0' in body
+        assert '"max_tokens":200' in body
+        assert '"stream":false' in body
+
+        # Batch 10.3:
+        # OpenRouter must receive strict structured output.
+        assert '"response_format"' in body
+        assert '"type":"json_schema"' in body
+        assert '"name":"aidenops_triage"' in body
+        assert '"strict":true' in body
+        assert '"required"' in body
+        assert '"additionalProperties":false' in body
+
+        # Batch 10.3:
+        # Require the selected OpenRouter provider to support
+        # the requested parameters.
+        assert '"provider"' in body
+        assert '"require_parameters":true' in body
+
+        return httpx.Response(
+            200,
+            json={
+                "model": "test-model",
+                "choices": [
+                    {
+                        "message": {
+                            "content": (
+                                '{"domain":"Network",'
+                                '"severity":"P2",'
+                                '"confidence":0.91}'
+                            )
+                        }
+                    }
+                ],
+                "usage": {
+                    "prompt_tokens": 123,
+                    "completion_tokens": 45,
+                },
+            },
+            request=request,
+        )
+
+    transport = httpx.MockTransport(handler)
+
+    client = OpenRouterClient(
+        base_url="https://example.test/v1",
+        api_key="test-key",
+        model="test-model",
+    )
+
+    original_client = httpx.Client
+
+    class MockClient:
+        def __init__(self, *args, **kwargs):
+            kwargs["transport"] = transport
+
+            self._client = original_client(
+                *args,
+                **kwargs,
+            )
+
+        def __enter__(self):
+            self._client.__enter__()
+            return self
+
+        def __exit__(self, *args):
+            return self._client.__exit__(*args)
+
+        def post(self, *args, **kwargs):
+            return self._client.post(
+                *args,
+                **kwargs,
+            )
+
+    monkeypatch.setattr(
+        httpx,
+        "Client",
+        MockClient,
+    )
+
+    result = client.chat(
+        system_prompt="You are a triage agent.",
+        user_prompt="VPN is down.",
+        temperature=0.0,
+        max_tokens=200,
+        response_format={
+            "type": "json_schema",
+            "json_schema": {
+                "name": "aidenops_triage",
+                "strict": True,
+                "schema": {
+                    "type": "object",
+                    "properties": {
+                        "domain": {
+                            "type": "string",
+                            "enum": [
+                                "Network",
+                                "Identity",
+                                "Database",
+                                "Infrastructure",
+                                "Unknown",
+                            ],
+                            "description": "The incident domain.",
+                        },
+                        "severity": {
+                            "type": "string",
+                            "enum": [
+                                "P1",
+                                "P2",
+                                "P3",
+                            ],
+                            "description": (
+                                "The incident severity."
+                            ),
+                        },
+                        "confidence": {
+                            "type": "number",
+                            "description": (
+                                "Classification confidence "
+                                "from 0.0 to 1.0."
+                            ),
+                        },
+                    },
+                    "required": [
+                        "domain",
+                        "severity",
+                        "confidence",
+                    ],
+                    "additionalProperties": False,
+                },
+            },
+        },
+    )
+
+    assert result.content.startswith(
+        '{"domain":"Network"'
+    )
+    assert result.model == "test-model"
+    assert result.prompt_tokens == 123
+    assert result.completion_tokens == 45
+    assert result.latency_ms >= 0.0
+
+
 def test_create_llm_client_selects_all_providers(
     monkeypatch,
 ) -> None:
@@ -277,6 +459,7 @@ def test_create_llm_client_selects_all_providers(
             client,
             expected_type,
         )
+
 
 def test_create_llm_client_rejects_deterministic() -> None:
     with pytest.raises(

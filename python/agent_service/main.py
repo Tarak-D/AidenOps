@@ -42,7 +42,53 @@ class AgentRunResponse(BaseModel):
     error: str | None = None
 
 
-@app.get("/health", response_model=HealthResponse)
+def _normalize_api_trace(
+    trace: list[dict],
+) -> list[dict]:
+    """
+    Translate the internal Python trace contract into
+    the external API contract.
+
+    Internal triage trace:
+
+        agent = "triage"
+        step  = "deterministic_triage"
+        OR
+        step  = "llm_triage"
+
+    External API trace:
+
+        agent = "TriageAgent"
+        step  = "triage"
+
+    Other agent traces are preserved unchanged.
+    """
+
+    normalized: list[dict] = []
+
+    for entry in trace:
+        item = dict(entry)
+
+        if (
+            item.get("agent") == "triage"
+            and item.get("step")
+            in {
+                "deterministic_triage",
+                "llm_triage",
+            }
+        ):
+            item["agent"] = "TriageAgent"
+            item["step"] = "triage"
+
+        normalized.append(item)
+
+    return normalized
+
+
+@app.get(
+    "/health",
+    response_model=HealthResponse,
+)
 async def health() -> HealthResponse:
     return HealthResponse(status="healthy")
 
@@ -73,10 +119,19 @@ async def start_agent_run(
 
     if decision == "resolve":
         outcome = "Resolved"
+
     elif decision == "propose_tool":
         outcome = "AwaitingApproval"
+
     else:
         outcome = "Escalated"
+
+    trace = _normalize_api_trace(
+        result.get(
+            "trace",
+            [],
+        )
+    )
 
     return AgentRunResponse(
         correlation_id=request.correlation_id,
@@ -98,10 +153,7 @@ async def start_agent_run(
         tool_proposal=result.get(
             "tool_proposal",
         ),
-        trace=result.get(
-            "trace",
-            [],
-        ),
+        trace=trace,
         error=result.get(
             "error",
         ),

@@ -1,141 +1,220 @@
+from __future__ import annotations
+
 import os
 
 import pytest
 
-from agent_service.graph import build_graph
+from agent_service.agents.triage import (
+    triage_ticket,
+)
 
 
-def test_graph_resolves_known_incident(monkeypatch):
+def test_deterministic_triage_network_p1(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     monkeypatch.setenv(
         "AGENT_LLM_PROVIDER",
         "deterministic",
     )
 
-    graph = build_graph()
-
-    result = graph.invoke(
-        {
-            "correlation_id": (
-                "00000000-0000-0000-0000-000000000001"
-            ),
-            "ticket_id": (
-                "00000000-0000-0000-0000-000000000002"
-            ),
-            "title": "VPN failure",
-            "description": "The corporate VPN is down.",
-        }
+    result, trace = triage_ticket(
+        "Production network outage. All users cannot connect."
     )
 
-    assert result["domain"] == "Network"
-    assert result["severity"] == "P1"
-    assert result["confidence"] == 0.85
+    assert result.domain == "Network"
+    assert result.severity == "P1"
+    assert result.confidence == 0.75
 
-    assert result["knowledge"] == []
-
-    assert result["investigation"]["domain"] == "Network"
-    assert result["investigation"]["knowledge_count"] == 0
-
-    assert result["decision"] == "resolve"
-
-    assert len(result["trace"]) == 5
-
-    assert result["trace"][0]["agent"] == "TriageAgent"
-    assert result["trace"][1]["agent"] == "KnowledgeAgent"
-    assert result["trace"][2]["agent"] == "InvestigationAgent"
-    assert result["trace"][3]["agent"] == "DecisionAgent"
-    assert result["trace"][4]["step"] == "resolve"
+    assert trace.agent == "triage"
+    assert trace.step_name == "deterministic_triage"
+    assert trace.model == "deterministic/bootstrap"
 
 
-def test_graph_escalates_unknown_incident(monkeypatch):
+def test_deterministic_triage_identity_p2(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     monkeypatch.setenv(
         "AGENT_LLM_PROVIDER",
         "deterministic",
     )
 
-    graph = build_graph()
-
-    result = graph.invoke(
-        {
-            "correlation_id": (
-                "00000000-0000-0000-0000-000000000003"
-            ),
-            "ticket_id": (
-                "00000000-0000-0000-0000-000000000004"
-            ),
-            "title": "Something strange",
-            "description": "The issue is not recognized.",
-        }
+    result, trace = triage_ticket(
+        "Authentication is slow and intermittent for multiple users."
     )
 
-    assert result["domain"] == "Unknown"
-    assert result["severity"] == "P3"
-    assert result["confidence"] == 0.35
+    assert result.domain == "Identity"
+    assert result.severity == "P2"
 
-    assert result["decision"] == "escalate"
-
-    assert len(result["trace"]) == 5
-
-    assert result["trace"][0]["agent"] == "TriageAgent"
-    assert result["trace"][1]["agent"] == "KnowledgeAgent"
-    assert result["trace"][2]["agent"] == "InvestigationAgent"
-    assert result["trace"][3]["agent"] == "DecisionAgent"
-    assert result["trace"][4]["step"] == "escalate"
+    assert trace.agent == "triage"
+    assert trace.step_name == "deterministic_triage"
 
 
-def test_graph_with_openrouter():
-    if os.getenv("AGENT_LLM_PROVIDER", "").strip().lower() != "openrouter":
-        pytest.skip(
-            "Set AGENT_LLM_PROVIDER=openrouter to run the live OpenRouter test."
-        )
-
-    if not os.getenv("OPENROUTER_API_KEY", "").strip():
-        pytest.skip(
-            "Set OPENROUTER_API_KEY to run the live OpenRouter test."
-        )
-
-    if not os.getenv("AGENT_LLM_MODEL", "").strip():
-        pytest.skip(
-            "Set AGENT_LLM_MODEL to run the live OpenRouter test."
-        )
-
-    graph = build_graph()
-
-    result = graph.invoke(
-        {
-            "correlation_id": (
-                "00000000-0000-0000-0000-000000000005"
-            ),
-            "ticket_id": (
-                "00000000-0000-0000-0000-000000000006"
-            ),
-            "title": "VPN outage in production",
-            "description": (
-                "Users cannot connect to the corporate VPN "
-                "and are unable to work."
-            ),
-        }
+def test_deterministic_triage_database_p3(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv(
+        "AGENT_LLM_PROVIDER",
+        "deterministic",
     )
 
-    assert result["domain"] == "Network"
-    assert result["severity"] == "P1"
-    assert result["confidence"] >= 0.50
+    result, trace = triage_ticket(
+        "A database query needs investigation."
+    )
 
-    assert result["knowledge"] == []
+    assert result.domain == "Database"
+    assert result.severity == "P3"
 
-    assert result["investigation"]["domain"] == "Network"
-    assert result["investigation"]["severity"] == "P1"
 
-    assert result["decision"] == "resolve"
+class FakeResponse:
+    def __init__(self) -> None:
+        self.content = (
+            '{"domain":"Network",'
+            '"severity":"P2",'
+            '"confidence":0.91}'
+        )
 
-    assert len(result["trace"]) == 5
+        self.model = "fake-model"
+        self.prompt_tokens = 10
+        self.completion_tokens = 20
+        self.latency_ms = 12.5
 
-    assert result["trace"][0]["agent"] == "TriageAgent"
-    assert result["trace"][0]["model"] == os.environ["AGENT_LLM_MODEL"]
-    assert result["trace"][0]["prompt_tokens"] > 0
-    assert result["trace"][0]["completion_tokens"] > 0
-    assert result["trace"][0]["latency_ms"] > 0
 
-    assert result["trace"][1]["agent"] == "KnowledgeAgent"
-    assert result["trace"][2]["agent"] == "InvestigationAgent"
-    assert result["trace"][3]["agent"] == "DecisionAgent"
-    assert result["trace"][4]["step"] == "resolve"
+class FakeClient:
+    def __init__(
+        self,
+        provider: str,
+    ) -> None:
+        self.provider = provider
+
+    def chat(
+        self,
+        *,
+        system_prompt: str,
+        user_prompt: str,
+        temperature: float,
+        max_tokens: int,
+        response_format: dict,
+    ) -> FakeResponse:
+        assert system_prompt
+        assert user_prompt
+
+        assert temperature == 0.0
+        assert max_tokens == 512
+
+        if self.provider == "openrouter":
+            assert response_format == {
+                "type": "json_schema",
+                "json_schema": {
+                    "name": "aidenops_triage",
+                    "strict": True,
+                    "schema": {
+                        "type": "object",
+                        "properties": {
+                            "domain": {
+                                "type": "string",
+                                "enum": [
+                                    "Network",
+                                    "Identity",
+                                    "Database",
+                                    "Infrastructure",
+                                    "Unknown",
+                                ],
+                                "description": (
+                                    "The incident domain."
+                                ),
+                            },
+                            "severity": {
+                                "type": "string",
+                                "enum": [
+                                    "P1",
+                                    "P2",
+                                    "P3",
+                                ],
+                                "description": (
+                                    "The incident severity."
+                                ),
+                            },
+                            "confidence": {
+                                "type": "number",
+                                "description": (
+                                    "Classification confidence "
+                                    "from 0.0 to 1.0."
+                                ),
+                            },
+                        },
+                        "required": [
+                            "domain",
+                            "severity",
+                            "confidence",
+                        ],
+                        "additionalProperties": False,
+                    },
+                },
+            }
+
+        else:
+            assert response_format == {
+                "type": "json_object",
+            }
+
+        return FakeResponse()
+
+
+@pytest.mark.parametrize(
+    "provider",
+    [
+        "nvidia",
+        "openrouter",
+        "openai",
+        "anthropic",
+        "google",
+        "azure",
+        "azure_openai",
+        "azure-openai",
+    ],
+)
+def test_provider_triage(
+    monkeypatch: pytest.MonkeyPatch,
+    provider: str,
+) -> None:
+    monkeypatch.setenv(
+        "AGENT_LLM_PROVIDER",
+        provider,
+    )
+
+    import agent_service.agents.triage as triage_module
+
+    monkeypatch.setattr(
+        triage_module,
+        "create_llm_client",
+        lambda provider: FakeClient(provider),
+    )
+
+    result, trace = triage_ticket(
+        "Production network latency affecting users."
+    )
+
+    assert result.domain == "Network"
+    assert result.severity == "P2"
+    assert result.confidence == 0.91
+
+    assert trace.agent == "triage"
+    assert trace.step_name == "llm_triage"
+    assert trace.model == "fake-model"
+    assert trace.prompt_tokens == 10
+    assert trace.completion_tokens == 20
+    assert trace.latency_ms == 12.5
+
+
+def test_provider_is_read_from_environment(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv(
+        "AGENT_LLM_PROVIDER",
+        "deterministic",
+    )
+
+    assert (
+        os.getenv("AGENT_LLM_PROVIDER")
+        == "deterministic"
+    )

@@ -52,7 +52,7 @@ def test_agent_run_network_uses_langgraph(
 
     assert body["triage"]["domain"] == "Network"
     assert body["triage"]["severity"] == "P1"
-    assert body["triage"]["confidence"] == 0.85
+    assert body["triage"]["confidence"] == 0.75
 
     assert body["tool_proposal"] is None
     assert body["error"] is None
@@ -101,7 +101,6 @@ def test_agent_run_unknown_escalates(
     body = response.json()
 
     assert body["outcome"] == "Escalated"
-
     assert body["triage"]["domain"] == "Unknown"
     assert body["triage"]["severity"] == "P3"
     assert body["triage"]["confidence"] == 0.35
@@ -149,7 +148,7 @@ def test_agent_run_resume_failure():
         "/api/v1/agent/runs/resume",
         json={
             "correlation_id": (
-                "00000000-0000-0000-000000000007"
+                "00000000-0000-0000-0000-000000000007"
             ),
             "ticket_id": (
                 "00000000-0000-0000-0000-000000000008"
