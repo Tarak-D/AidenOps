@@ -50,16 +50,17 @@ Phase 7  — RAG / Knowledge Retrieval
 Phase 8  — Agent Evaluation & Observability
 Phase 9  — Python / LangGraph Agent Swarm
 Phase 10 — Multi-Provider LLM Integration
+Phase 11 — RAG Context Injection / Reasoning
 ```
 
 ## Current phase
 
 ```text
-Phase 10 — Multi-Provider LLM Integration
+Phase 11 — RAG Context Injection / Reasoning
 STATUS: COMPLETE
 
 Next phase:
-Phase 11 — RAG Context Injection / Reasoning
+Phase 12 — Tool Proposal Agent
 STATUS: NEXT
 ```
 
@@ -2472,11 +2473,11 @@ RAG Context Injection / Reasoning
 
 ---
 
-# 72. Next Phase — Phase 11
+# 72. Phase 11 — RAG Context Injection / Reasoning
 
-The next major architectural step is to connect the authoritative .NET/PostgreSQL RAG system to the Python LangGraph reasoning flow.
+Phase 11 connected the authoritative .NET/PostgreSQL RAG system to the Python LangGraph reasoning flow.
 
-Target:
+Completed flow:
 
 ```text
 Ticket
@@ -2498,7 +2499,7 @@ Approval
 Execution
 ```
 
-The important change will be:
+The completed Phase 11 change is:
 
 ```text
 KnowledgeAgent
@@ -2508,19 +2509,76 @@ becoming a real retrieval participant rather than a no-op boundary.
 
 ---
 
-# 73. Phase 11 Goals
+# 73. Phase 11 Completion
 
-Planned work:
+Phase 11 is complete.
+
+Completed implementation:
 
 ```text
-Expose retrieval through a stable boundary
-Retrieve relevant knowledge for an incident
-Pass knowledge context into reasoning
-Track retrieval results in trace
-Track retrieval latency
-Track retrieval relevance
-Evaluate retrieval behavior
-Preserve PostgreSQL/pgvector authority
+.NET /api/v1/knowledge/search
+IKnowledgeStore-backed retrieval
+PostgreSQL + pgvector retrieval
+Python retrieval service
+.NET HTTP retrieval boundary
+LangGraph knowledge node
+Knowledge context builder
+InvestigationAgent
+Investigation-aware DecisionAgent
+Knowledge-aware trace entries
+Public API contract preservation
+Deterministic/offline regression support
+```
+
+Completed flow:
+
+```text
+Ticket
+   ↓
+Triage
+   ↓
+.NET Knowledge API
+   ↓
+PostgreSQL + pgvector
+   ↓
+Knowledge Results
+   ↓
+Knowledge Context
+   ↓
+InvestigationAgent
+   ↓
+Investigation-aware DecisionAgent
+   ↓
+Resolve / Escalate
+```
+
+Phase 11 verification:
+
+```text
+Python test suite: 70 passed, 1 warning
+.NET API test suite: 9 passed, 0 failed
+git diff --check: passed
+Live RAG verification: succeeded
+Temporary verification fixture: removed
+knowledge_documents: 0
+knowledge_chunks: 0
+```
+
+Latest Phase 11 commits:
+
+```text
+6690f5d Implement Phase 11 RAG investigation
+88352fe Make decisions investigation aware
+```
+
+The deterministic embedding generator remains the bootstrap/test implementation. The live verification confirms the retrieval and context-injection architecture, not semantic embedding quality.
+
+There is no phase-11-complete Git tag at this checkpoint.
+
+Phase 11 is now the baseline for:
+
+```text
+Phase 12 — Tool Proposal Agent
 ```
 
 ---
@@ -2782,17 +2840,30 @@ Phase 6   COMPLETE
 Phase 7   COMPLETE
 Phase 8   COMPLETE
 Phase 9   COMPLETE
-
 Phase 10  COMPLETE
+Phase 11  COMPLETE
 
 Current completed checkpoint:
-phase-10-complete
+Phase 11 — RAG Context Injection / Reasoning
 
-Latest completed Phase 10 commit:
-1026ddd
+Latest Phase 11 commits:
+6690f5d
+88352fe
 
-Current Phase 10 architecture:
-Provider-independent LLM layer
+Current Phase 11 architecture:
+.NET Knowledge API
+        ↓
+PostgreSQL + pgvector
+        ↓
+Python retrieval boundary
+        ↓
+LangGraph KnowledgeAgent
+        ↓
+Knowledge Context
+        ↓
+InvestigationAgent
+        ↓
+Investigation-aware DecisionAgent
 
 Providers implemented:
 - deterministic
@@ -2806,11 +2877,14 @@ Providers implemented:
 NVIDIA live test:
 Timed out
 
-OpenRouter:
-Selected for live provider testing
+OpenRouter live smoke test:
+Succeeded
+
+Phase 11 live RAG verification:
+Succeeded
 
 Next architectural phase:
-Phase 11 — RAG Context Injection / Reasoning
+Phase 12 — Tool Proposal Agent
 =============================================
 ```
 
@@ -2922,8 +2996,10 @@ Deterministic testing
 Evaluation
 ```
 
-The immediate next step is to complete Phase 10 live-provider verification and then proceed to:
+Phase 11 completed the connection between the authoritative .NET/PostgreSQL RAG subsystem and the Python LangGraph reasoning workflow.
+
+The immediate next step is:
 
 ```text
-Phase 11 — RAG Context Injection / Reasoning
+Phase 12 — Tool Proposal Agent
 ```
