@@ -200,10 +200,59 @@ def decision_node(
         0.0,
     )
 
-    if confidence < 0.50:
-        decision = "escalate"
+    investigation = state.get(
+        "investigation",
+        {},
+    )
+
+    recommendation = investigation.get(
+        "recommendation",
+    )
+
+    knowledge_count = investigation.get(
+        "knowledge_count",
+        len(
+            state.get(
+                "knowledge",
+                [],
+            )
+        ),
+    )
+
+    # Investigation-aware decision:
+    #
+    # When actual knowledge evidence exists,
+    # InvestigationAgent becomes the primary
+    # reasoning signal.
+    #
+    # When no knowledge was retrieved, preserve
+    # the existing confidence-based fallback.
+    if knowledge_count > 0:
+        if recommendation == "resolve":
+            decision = "resolve"
+
+        elif recommendation in {
+            "escalate",
+            "investigate_further",
+        }:
+            decision = "escalate"
+
+        else:
+            # Unknown or malformed recommendation:
+            # fail safely using the existing confidence
+            # fallback.
+            if confidence < 0.50:
+                decision = "escalate"
+            else:
+                decision = "resolve"
+
     else:
-        decision = "resolve"
+        # Preserve existing behavior when RAG returned
+        # no evidence.
+        if confidence < 0.50:
+            decision = "escalate"
+        else:
+            decision = "resolve"
 
     return {
         **state,
@@ -215,13 +264,18 @@ def decision_node(
                 "agent": "DecisionAgent",
                 "step": "decision",
                 "model": "deterministic/bootstrap",
-                "prompt_version": "v0-bootstrap",
+                "prompt_version": "v1-investigation-aware",
                 "prompt_tokens": 0,
                 "completion_tokens": 0,
                 "latency_ms": 0.0,
                 "summary": (
-                    f"Decision={decision} "
-                    f"with confidence={confidence:.2f}"
+                    f"Decision={decision}; "
+                    f"investigation_recommendation="
+                    f"{recommendation}; "
+                    f"knowledge_count="
+                    f"{knowledge_count}; "
+                    f"confidence="
+                    f"{confidence:.2f}"
                 ),
             },
         ),

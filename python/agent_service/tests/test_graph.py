@@ -393,3 +393,185 @@ def test_graph_investigation_consumes_rag_context(
         investigation_traces[0]["step"]
         == "deterministic_investigation"
     )
+
+
+# ============================================================
+# Phase 11 — Batch 4
+# Investigation-aware DecisionAgent tests
+# ============================================================
+
+
+def test_decision_uses_investigation_resolve_recommendation() -> None:
+    state = {
+        "domain": "Network",
+        "severity": "P1",
+        "confidence": 0.60,
+        "knowledge": [
+            {
+                "source": "VPN Runbook",
+                "title": "VPN Authentication Failure",
+                "content": "Verify VPN credentials.",
+                "similarity": 0.91,
+            }
+        ],
+        "investigation": {
+            "summary": "Evidence supports resolution.",
+            "evidence": [
+                "Verify VPN credentials.",
+            ],
+            "recommendation": "resolve",
+            "knowledge_count": 1,
+        },
+    }
+
+    result = graph.decision_node(state)
+
+    assert result["decision"] == "resolve"
+    assert result["tool_proposal"] is None
+
+    decision_traces = [
+        item
+        for item in result["trace"]
+        if (
+            item["agent"] == "DecisionAgent"
+            and item["step"] == "decision"
+        )
+    ]
+
+    assert len(decision_traces) == 1
+    assert (
+        "investigation_recommendation=resolve"
+        in decision_traces[0]["summary"]
+    )
+    assert (
+        "knowledge_count=1"
+        in decision_traces[0]["summary"]
+    )
+
+
+def test_decision_escalates_on_investigate_further() -> None:
+    state = {
+        "domain": "Network",
+        "severity": "P2",
+        "confidence": 0.90,
+        "knowledge": [
+            {
+                "source": "VPN Runbook",
+                "title": "VPN Authentication Failure",
+                "content": (
+                    "Insufficient evidence for resolution."
+                ),
+                "similarity": 0.61,
+            }
+        ],
+        "investigation": {
+            "summary": "More investigation is required.",
+            "evidence": [
+                "Insufficient evidence for resolution.",
+            ],
+            "recommendation": "investigate_further",
+            "knowledge_count": 1,
+        },
+    }
+
+    result = graph.decision_node(state)
+
+    assert result["decision"] == "escalate"
+
+
+def test_decision_escalates_on_investigation_escalate() -> None:
+    state = {
+        "domain": "Identity",
+        "severity": "P1",
+        "confidence": 0.90,
+        "knowledge": [
+            {
+                "source": "Identity Runbook",
+                "title": "Account Lockout",
+                "content": "Security review is required.",
+                "similarity": 0.94,
+            }
+        ],
+        "investigation": {
+            "summary": "Security review is required.",
+            "evidence": [
+                "Security review is required.",
+            ],
+            "recommendation": "escalate",
+            "knowledge_count": 1,
+        },
+    }
+
+    result = graph.decision_node(state)
+
+    assert result["decision"] == "escalate"
+
+
+def test_decision_preserves_confidence_fallback_without_knowledge() -> None:
+    state = {
+        "domain": "Network",
+        "severity": "P1",
+        "confidence": 0.75,
+        "knowledge": [],
+        "investigation": {
+            "summary": (
+                "No knowledge evidence was retrieved "
+                "for the incident."
+            ),
+            "evidence": [],
+            "recommendation": "investigate_further",
+            "knowledge_count": 0,
+        },
+    }
+
+    result = graph.decision_node(state)
+
+    assert result["decision"] == "resolve"
+
+
+def test_decision_low_confidence_escalates_without_knowledge() -> None:
+    state = {
+        "domain": "Unknown",
+        "severity": "P3",
+        "confidence": 0.35,
+        "knowledge": [],
+        "investigation": {
+            "summary": (
+                "No knowledge evidence was retrieved "
+                "for the incident."
+            ),
+            "evidence": [],
+            "recommendation": "investigate_further",
+            "knowledge_count": 0,
+        },
+    }
+
+    result = graph.decision_node(state)
+
+    assert result["decision"] == "escalate"
+
+
+def test_decision_unknown_investigation_recommendation_falls_back_safely() -> None:
+    state = {
+        "domain": "Network",
+        "severity": "P2",
+        "confidence": 0.80,
+        "knowledge": [
+            {
+                "source": "Network Runbook",
+                "title": "Connectivity",
+                "content": "Check connectivity.",
+                "similarity": 0.80,
+            }
+        ],
+        "investigation": {
+            "summary": "Invalid recommendation test.",
+            "evidence": [],
+            "recommendation": "unknown_value",
+            "knowledge_count": 1,
+        },
+    }
+
+    result = graph.decision_node(state)
+
+    assert result["decision"] == "resolve"
