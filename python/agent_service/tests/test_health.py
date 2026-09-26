@@ -1,9 +1,24 @@
 from fastapi.testclient import TestClient
 
 from agent_service.main import app
+from agent_service.models.agent import AgentTrace
+from agent_service import graph
 
 
 client = TestClient(app)
+
+
+def fake_retrieve_knowledge(
+    query: str,
+    limit: int = 5,
+) -> tuple[list[dict], AgentTrace]:
+    return [], AgentTrace(
+        agent="KnowledgeAgent",
+        step_name="knowledge",
+        model="none",
+        prompt_version="v1-test",
+        summary="Test knowledge retrieval boundary.",
+    )
 
 
 def test_health():
@@ -21,6 +36,12 @@ def test_agent_run_network_uses_langgraph(
     monkeypatch.setenv(
         "AGENT_LLM_PROVIDER",
         "deterministic",
+    )
+
+    monkeypatch.setattr(
+        graph,
+        "retrieve_knowledge",
+        fake_retrieve_knowledge,
     )
 
     response = client.post(
@@ -80,6 +101,12 @@ def test_agent_run_unknown_escalates(
     monkeypatch.setenv(
         "AGENT_LLM_PROVIDER",
         "deterministic",
+    )
+
+    monkeypatch.setattr(
+        graph,
+        "retrieve_knowledge",
+        fake_retrieve_knowledge,
     )
 
     response = client.post(

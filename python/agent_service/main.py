@@ -61,7 +61,8 @@ def _normalize_api_trace(
         agent = "TriageAgent"
         step  = "triage"
 
-    Other agent traces are preserved unchanged.
+    InvestigationAgent also keeps an external stable
+    API step name of "investigation".
     """
 
     normalized: list[dict] = []
@@ -80,6 +81,9 @@ def _normalize_api_trace(
             item["agent"] = "TriageAgent"
             item["step"] = "triage"
 
+        elif item.get("agent") == "InvestigationAgent":
+            item["step"] = "investigation"
+
         normalized.append(item)
 
     return normalized
@@ -90,7 +94,9 @@ def _normalize_api_trace(
     response_model=HealthResponse,
 )
 async def health() -> HealthResponse:
-    return HealthResponse(status="healthy")
+    return HealthResponse(
+        status="healthy",
+    )
 
 
 @app.post(

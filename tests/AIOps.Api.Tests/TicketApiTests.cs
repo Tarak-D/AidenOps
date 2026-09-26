@@ -196,6 +196,42 @@ public sealed class TicketApiTests : IClassFixture<WebApplicationFactory<Program
     }
 
     [Fact]
+public async Task Knowledge_search_without_query_returns_400()
+{
+    var res = await _client.GetAsync(
+        "/api/v1/knowledge/search");
+
+    Assert.Equal(
+        HttpStatusCode.BadRequest,
+        res.StatusCode);
+
+    var body =
+        await res.Content.ReadAsStringAsync();
+
+    Assert.Contains(
+        "Query parameter 'q' is required.",
+        body);
+}
+
+[Fact]
+public async Task Knowledge_search_with_invalid_limit_returns_400()
+{
+    var res = await _client.GetAsync(
+        "/api/v1/knowledge/search?q=VPN&limit=0");
+
+    Assert.Equal(
+        HttpStatusCode.BadRequest,
+        res.StatusCode);
+
+    var body =
+        await res.Content.ReadAsStringAsync();
+
+    Assert.Contains(
+        "between 1 and 50",
+        body);
+}
+
+    [Fact]
     public void ToolSystem_IsRegisteredInHost()
     {
         var toolRegistry =

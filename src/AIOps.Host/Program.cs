@@ -165,6 +165,7 @@ app.MapGet(
 
 // --- Phase 2: ticket lifecycle API ---
 app.MapTicketApi();
+app.MapKnowledgeApi();
 
 app.Run();
 

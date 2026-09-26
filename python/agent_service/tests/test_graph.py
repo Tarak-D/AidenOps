@@ -4,8 +4,12 @@ import os
 
 import pytest
 
+from agent_service import graph
 from agent_service.agents.triage import (
     triage_ticket,
+)
+from agent_service.graph import (
+    investigation_node,
 )
 
 
@@ -217,4 +221,175 @@ def test_provider_is_read_from_environment(
     assert (
         os.getenv("AGENT_LLM_PROVIDER")
         == "deterministic"
+    )
+
+
+def test_investigation_injects_retrieved_knowledge_context() -> None:
+    state = {
+        "domain": "Network",
+        "severity": "P1",
+        "confidence": 0.75,
+        "knowledge": [
+            {
+                "source": "VPN Runbook",
+                "title": "VPN Authentication Failure",
+                "content": (
+                    "Verify VPN credentials and "
+                    "check account lock status."
+                ),
+                "similarity": 0.91,
+            },
+            {
+                "source": "Network Runbook",
+                "title": "VPN Connectivity",
+                "content": (
+                    "Check tunnel status and "
+                    "network connectivity."
+                ),
+                "similarity": 0.84,
+            },
+        ],
+    }
+
+    result = investigation_node(state)
+
+    context = result["knowledge_context"]
+
+    assert "[Knowledge 1]" in context
+    assert "Source: VPN Runbook" in context
+    assert "Title: VPN Authentication Failure" in context
+    assert "Similarity: 0.9100" in context
+    assert (
+        "Verify VPN credentials and check account lock status."
+        in context
+    )
+
+    assert "[Knowledge 2]" in context
+    assert "Source: Network Runbook" in context
+    assert "Title: VPN Connectivity" in context
+    assert "Similarity: 0.8400" in context
+    assert (
+        "Check tunnel status and network connectivity."
+        in context
+    )
+
+    assert result["investigation"]["knowledge_count"] == 2
+    assert (
+        result["investigation"]["knowledge_context"]
+        == context
+    )
+
+
+def test_investigation_handles_empty_knowledge() -> None:
+    state = {
+        "domain": "Unknown",
+        "severity": "P3",
+        "confidence": 0.35,
+        "knowledge": [],
+    }
+
+    result = investigation_node(state)
+
+    assert result["knowledge_context"] == ""
+    assert result["investigation"]["knowledge_count"] == 0
+    assert result["investigation"]["knowledge_context"] == ""
+
+
+def test_investigation_preserves_structured_knowledge() -> None:
+    knowledge = [
+        {
+            "source": "Database Runbook",
+            "title": "Slow SQL Query",
+            "content": "Inspect query execution plan.",
+            "similarity": 0.88,
+        },
+    ]
+
+    state = {
+        "domain": "Database",
+        "severity": "P3",
+        "confidence": 0.75,
+        "knowledge": knowledge,
+    }
+
+    result = investigation_node(state)
+
+    assert result["knowledge"] == knowledge
+
+
+def test_graph_investigation_consumes_rag_context(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv(
+        "AGENT_LLM_PROVIDER",
+        "deterministic",
+    )
+
+    def fake_retrieve_knowledge(
+        query: str,
+        limit: int = 5,
+    ) -> tuple[list[dict], object]:
+        from agent_service.models.agent import AgentTrace
+
+        return (
+            [
+                {
+                    "source": "VPN Runbook",
+                    "title": "VPN Authentication Failure",
+                    "content": "Verify VPN credentials.",
+                    "similarity": 0.91,
+                }
+            ],
+            AgentTrace(
+                agent="KnowledgeAgent",
+                step_name="knowledge",
+                model="none",
+                prompt_version="v1-test",
+                summary="Retrieved test knowledge.",
+            ),
+        )
+
+    monkeypatch.setattr(
+        graph,
+        "retrieve_knowledge",
+        fake_retrieve_knowledge,
+    )
+
+    workflow = graph.build_graph()
+
+    result = workflow.invoke(
+        {
+            "correlation_id": "corr-001",
+            "ticket_id": "ticket-001",
+            "title": "VPN authentication failure",
+            "description": (
+                "Users cannot connect to the corporate VPN."
+            ),
+            "reporter_email": "user@example.com",
+        }
+    )
+
+    assert result["knowledge"]
+    assert result["knowledge"][0]["source"] == "VPN Runbook"
+
+    assert result["knowledge_context"]
+    assert "VPN Runbook" in result["knowledge_context"]
+    assert "Verify VPN credentials." in result["knowledge_context"]
+
+    assert result["investigation"]["knowledge_count"] == 1
+    assert (
+        result["investigation"]["recommendation"]
+        == "resolve"
+    )
+
+    investigation_traces = [
+        item
+        for item in result["trace"]
+        if item["agent"] == "InvestigationAgent"
+    ]
+
+    assert len(investigation_traces) == 1
+    assert (
+        investigation_traces[0]["step"]
+        == "deterministic_investigation"
     )

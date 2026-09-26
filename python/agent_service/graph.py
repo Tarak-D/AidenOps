@@ -3,6 +3,7 @@ from typing import TypedDict
 from langgraph.graph import END, START, StateGraph
 
 from agent_service.agents.triage import triage_ticket
+from agent_service.agents.investigation import investigate_ticket
 from agent_service.retrieval.service import retrieve_knowledge
 
 
@@ -18,6 +19,7 @@ class AgentState(TypedDict, total=False):
     confidence: float
 
     knowledge: list[dict]
+    knowledge_context: str
     investigation: dict
 
     decision: str
@@ -36,6 +38,52 @@ def _append_trace(
         *existing,
         trace,
     ]
+
+
+def _build_knowledge_context(
+    knowledge: list[dict],
+) -> str:
+    if not knowledge:
+        return ""
+
+    sections: list[str] = []
+
+    for index, item in enumerate(knowledge, start=1):
+        source = str(
+            item.get("source")
+            or "Unknown source"
+        )
+
+        title = str(
+            item.get("title")
+            or "Untitled"
+        )
+
+        content = str(
+            item.get("content")
+            or ""
+        )
+
+        similarity = item.get("similarity")
+
+        if similarity is None:
+            similarity_text = "unknown"
+        else:
+            similarity_text = f"{float(similarity):.4f}"
+
+        sections.append(
+            "\n".join(
+                [
+                    f"[Knowledge {index}]",
+                    f"Source: {source}",
+                    f"Title: {title}",
+                    f"Similarity: {similarity_text}",
+                    f"Content: {content}",
+                ]
+            )
+        )
+
+    return "\n\n".join(sections)
 
 
 def triage_node(
@@ -99,32 +147,46 @@ def knowledge_node(
 def investigation_node(
     state: AgentState,
 ) -> AgentState:
-    investigation = {
-        "domain": state.get("domain", "Unknown"),
-        "severity": state.get("severity", "P3"),
-        "confidence": state.get("confidence", 0.0),
-        "knowledge_count": len(
-            state.get("knowledge", [])
-        ),
-    }
+    knowledge = state.get(
+        "knowledge",
+        [],
+    )
+
+    knowledge_context = state.get(
+        "knowledge_context",
+        "",
+    )
+
+    if not knowledge_context:
+        knowledge_context = _build_knowledge_context(
+            knowledge,
+        )
+
+    investigation, trace = investigate_ticket(
+        title=state.get("title", ""),
+        description=state.get("description", ""),
+        domain=state.get("domain", "Unknown"),
+        severity=state.get("severity", "P3"),
+        confidence=state.get("confidence", 0.0),
+        knowledge_context=knowledge_context,
+        knowledge_count=len(knowledge),
+    )
 
     return {
         **state,
+        "knowledge_context": knowledge_context,
         "investigation": investigation,
         "trace": _append_trace(
             state,
             {
-                "agent": "InvestigationAgent",
-                "step": "investigation",
-                "model": "deterministic/bootstrap",
-                "prompt_version": "v0-bootstrap",
-                "prompt_tokens": 0,
-                "completion_tokens": 0,
-                "latency_ms": 0.0,
-                "summary": (
-                    "Deterministic investigation completed "
-                    f"for domain={state.get('domain', 'Unknown')}"
-                ),
+                "agent": trace.agent,
+                "step": trace.step_name,
+                "model": trace.model,
+                "prompt_version": trace.prompt_version,
+                "prompt_tokens": trace.prompt_tokens,
+                "completion_tokens": trace.completion_tokens,
+                "latency_ms": trace.latency_ms,
+                "summary": trace.summary,
             },
         ),
     }
@@ -133,7 +195,10 @@ def investigation_node(
 def decision_node(
     state: AgentState,
 ) -> AgentState:
-    confidence = state.get("confidence", 0.0)
+    confidence = state.get(
+        "confidence",
+        0.0,
+    )
 
     if confidence < 0.50:
         decision = "escalate"
