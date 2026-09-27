@@ -2743,7 +2743,7 @@ Tickets
 Approvals
 Policy
 Tool execution
-Audit
+Audit 
 ```
 
 ## Rule 2 — Python owns agent workflow logic
