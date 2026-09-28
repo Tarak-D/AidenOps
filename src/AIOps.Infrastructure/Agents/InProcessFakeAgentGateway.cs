@@ -1,6 +1,8 @@
 using AIOps.Abstractions.Agents;
 using AIOps.Contracts.AgentGateway;
 using AIOps.Domain;
+using System.Text.Json;
+using System.Text.RegularExpressions;
 
 namespace AIOps.Infrastructure.Agents;
 
@@ -32,7 +34,36 @@ public sealed class InProcessFakeAgentGateway : IAgentGateway
                 null, trace, null));
         }
 
-        var proposal = ChooseTool(request, domain);
+        var usesServerSchemas = request.AllowedTools.Any(
+            tool => !string.IsNullOrWhiteSpace(tool.InputSchemaJson) &&
+                    tool.InputSchemaJson != "{}");
+        var proposal = usesServerSchemas
+            ? ChooseServerTool(request, domain)
+            : ChooseTool(request, domain);
+
+        if (usesServerSchemas)
+        {
+            var proposalOutcome = proposal is not null && proposal.Confidence >= 0.5
+                ? AgentRunOutcome.ProposalCreated
+                : AgentRunOutcome.Escalated;
+
+            trace.Add(new StepTrace("ToolProposalAgent", "tool_proposal", "fake/offline", "v1-fake-proposal", 0, 0, 1.0,
+                proposal is null ? "No suitable registered tool" : $"Proposed {proposal.ToolName}"));
+
+            return Task.FromResult(new AgentRunResult(
+                proposalOutcome,
+                confidence,
+                domain,
+                severity,
+                proposal,
+                proposalOutcome == AgentRunOutcome.Escalated
+                    ? "Fake gateway: no suitable tool found."
+                    : null,
+                null,
+                trace,
+                null));
+        }
+
         var outcome = proposal is not null && proposal.Confidence >= 0.5 &&
                       request.AllowedTools.FirstOrDefault(t => t.Name == proposal.ToolName) is { Risk: <= RiskLevel.Safe }
             ? AgentRunOutcome.Resolved
@@ -98,4 +129,85 @@ public sealed class InProcessFakeAgentGateway : IAgentGateway
             => new ToolProposal("Aws.RestartEc2Instance", "{}", 0.8, "Infrastructure issue; instance restart may help."),
         _ => null
     };
+
+    private static ToolProposal? ChooseServerTool(
+        AgentRunRequest request,
+        TicketDomain domain)
+    {
+        var available = request.AllowedTools
+            .Select(tool => tool.Name)
+            .ToHashSet(StringComparer.Ordinal);
+
+        if (domain == TicketDomain.Identity &&
+            IncidentHasPasswordResetIntent(request.Ticket.Title, request.Ticket.Description) &&
+            available.Contains("Directory.ResetPassword") &&
+            request.Ticket.ReporterEmail.Contains('@'))
+        {
+            return new ToolProposal(
+                "Directory.ResetPassword",
+                JsonSerializer.Serialize(new
+                {
+                    userPrincipalName = request.Ticket.ReporterEmail
+                }),
+                0.9,
+                "Identity issue; a password reset is a possible remedy.");
+        }
+
+        if (domain == TicketDomain.Network &&
+            available.Contains("Network.RunVpnDiagnostics") &&
+            request.Ticket.ReporterEmail.Contains('@'))
+        {
+            return new ToolProposal(
+                "Network.RunVpnDiagnostics",
+                JsonSerializer.Serialize(new
+                {
+                    userOrDeviceId = request.Ticket.ReporterEmail
+                }),
+                0.9,
+                "Read-only diagnostics may help investigate the network issue.");
+        }
+
+        if (domain == TicketDomain.Infrastructure)
+        {
+            var incidentText = $"{request.Ticket.Title} {request.Ticket.Description}";
+            var instanceId = Regex.Match(
+                incidentText,
+                @"\bi-[A-Za-z0-9-]+\b",
+                RegexOptions.IgnoreCase).Value;
+
+            if (!string.IsNullOrWhiteSpace(instanceId) &&
+                incidentText.Contains("restart", StringComparison.OrdinalIgnoreCase) &&
+                available.Contains("Cloud.RestartInstance"))
+            {
+                return new ToolProposal(
+                    "Cloud.RestartInstance",
+                    JsonSerializer.Serialize(new { instanceId }),
+                    0.82,
+                    "The incident asks to restart the identified cloud instance.");
+            }
+
+            if (!string.IsNullOrWhiteSpace(instanceId) &&
+                available.Contains("Cloud.GetInstanceStatus"))
+            {
+                return new ToolProposal(
+                    "Cloud.GetInstanceStatus",
+                    JsonSerializer.Serialize(new { instanceId }),
+                    0.78,
+                    "A read-only status check can investigate the identified instance.");
+            }
+        }
+
+        return null;
+    }
+
+    private static bool IncidentHasPasswordResetIntent(
+        string title,
+        string description)
+    {
+        var text = $"{title} {description}";
+        return text.Contains("password", StringComparison.OrdinalIgnoreCase) &&
+               (text.Contains("reset", StringComparison.OrdinalIgnoreCase) ||
+                text.Contains("forgot", StringComparison.OrdinalIgnoreCase) ||
+                text.Contains("locked", StringComparison.OrdinalIgnoreCase));
+    }
 }

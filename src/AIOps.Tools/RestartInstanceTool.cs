@@ -27,6 +27,10 @@ public sealed class RestartInstanceTool : ITool
 
     public RiskLevel Risk => RiskLevel.Moderate;
 
+    public string InputSchemaJson => """
+        {"type":"object","properties":{"instanceId":{"type":"string","minLength":1}},"required":["instanceId"],"additionalProperties":false}
+        """;
+
     public bool RequiresApproval => true;
 
     public async Task<ToolResult> ExecuteAsync(

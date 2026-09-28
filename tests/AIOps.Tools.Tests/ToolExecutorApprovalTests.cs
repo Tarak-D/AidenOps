@@ -436,7 +436,8 @@ public class ToolExecutorApprovalTests
                     _tool.Name,
                     _tool.Description,
                     _tool.Risk,
-                    _tool.RequiresApproval)
+                    _tool.RequiresApproval,
+                    _tool.InputSchemaJson)
             ];
         }
     }
@@ -457,6 +458,8 @@ public class ToolExecutorApprovalTests
             "Test tool used for approval safety tests.";
 
         public RiskLevel Risk { get; }
+
+        public string InputSchemaJson => "{\"type\":\"object\",\"properties\":{},\"additionalProperties\":false}";
 
         public bool Executed { get; private set; }
 

@@ -449,6 +449,28 @@ def test_decision_uses_investigation_resolve_recommendation() -> None:
     )
 
 
+def test_decision_routes_validated_candidate_to_proposal_outcome() -> None:
+    state = {
+        "confidence": 0.9,
+        "knowledge": [],
+        "investigation": {
+            "recommendation": "investigate_further",
+            "knowledge_count": 0,
+        },
+        "tool_proposal": {
+            "tool_name": "Network.RunVpnDiagnostics",
+            "arguments": {"userOrDeviceId": "user@example.com"},
+            "confidence": 0.8,
+            "justification": "Connectivity issue reported.",
+        },
+    }
+
+    result = graph.decision_node(state)
+
+    assert result["decision"] == "propose_tool"
+    assert result["tool_proposal"] == state["tool_proposal"]
+
+
 def test_decision_escalates_on_investigate_further() -> None:
     state = {
         "domain": "Network",

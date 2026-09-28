@@ -23,6 +23,10 @@ public sealed class RunVpnDiagnosticsTool : ITool
 
     public RiskLevel Risk => RiskLevel.Safe;
 
+    public string InputSchemaJson => """
+        {"type":"object","properties":{"userOrDeviceId":{"type":"string","minLength":1}},"required":["userOrDeviceId"],"additionalProperties":false}
+        """;
+
     public bool RequiresApproval => false;
 
     public async Task<ToolResult> ExecuteAsync(

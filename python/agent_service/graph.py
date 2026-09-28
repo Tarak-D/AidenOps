@@ -4,6 +4,7 @@ from langgraph.graph import END, START, StateGraph
 
 from agent_service.agents.triage import triage_ticket
 from agent_service.agents.investigation import investigate_ticket
+from agent_service.agents.tool_proposal import propose_tool
 from agent_service.retrieval.service import retrieve_knowledge
 
 
@@ -13,6 +14,9 @@ class AgentState(TypedDict, total=False):
     title: str
     description: str
     reporter_email: str
+    external_ref: str
+    allowed_tools: list[dict]
+    triage_confidence_threshold: float
 
     domain: str
     severity: str
@@ -192,6 +196,64 @@ def investigation_node(
     }
 
 
+def tool_proposal_node(
+    state: AgentState,
+) -> AgentState:
+    confidence = state.get("confidence", 0.0)
+    threshold = state.get("triage_confidence_threshold", 0.6)
+    if confidence < threshold:
+        proposal = None
+        trace_summary = (
+            f"No tool proposal because triage confidence {confidence:.2f} "
+            f"is below threshold {threshold:.2f}."
+        )
+        trace_agent = {
+            "agent": "ToolProposalAgent",
+            "step": "tool_proposal",
+            "model": "deterministic/policy",
+            "prompt_version": "v1-triage-confidence-policy",
+            "prompt_tokens": 0,
+            "completion_tokens": 0,
+            "latency_ms": 0.0,
+            "summary": trace_summary,
+        }
+        return {
+            **state,
+            "tool_proposal": proposal,
+            "trace": _append_trace(state, trace_agent),
+        }
+
+    proposal, trace = propose_tool(
+        title=state.get("title", ""),
+        description=state.get("description", ""),
+        reporter_email=state.get("reporter_email", ""),
+        external_ref=state.get("external_ref", ""),
+        domain=state.get("domain", "Unknown"),
+        severity=state.get("severity", "P3"),
+        investigation=state.get("investigation", {}),
+        knowledge_context=state.get("knowledge_context", ""),
+        allowed_tools=state.get("allowed_tools", []),
+    )
+
+    return {
+        **state,
+        "tool_proposal": proposal,
+        "trace": _append_trace(
+            state,
+            {
+                "agent": trace.agent,
+                "step": trace.step_name,
+                "model": trace.model,
+                "prompt_version": trace.prompt_version,
+                "prompt_tokens": trace.prompt_tokens,
+                "completion_tokens": trace.completion_tokens,
+                "latency_ms": trace.latency_ms,
+                "summary": trace.summary,
+            },
+        ),
+    }
+
+
 def decision_node(
     state: AgentState,
 ) -> AgentState:
@@ -208,6 +270,7 @@ def decision_node(
     recommendation = investigation.get(
         "recommendation",
     )
+    tool_proposal = state.get("tool_proposal")
 
     knowledge_count = investigation.get(
         "knowledge_count",
@@ -227,7 +290,9 @@ def decision_node(
     #
     # When no knowledge was retrieved, preserve
     # the existing confidence-based fallback.
-    if knowledge_count > 0:
+    if tool_proposal is not None:
+        decision = "propose_tool"
+    elif knowledge_count > 0:
         if recommendation == "resolve":
             decision = "resolve"
 
@@ -257,7 +322,7 @@ def decision_node(
     return {
         **state,
         "decision": decision,
-        "tool_proposal": None,
+        "tool_proposal": tool_proposal,
         "trace": _append_trace(
             state,
             {
@@ -292,6 +357,9 @@ def route_decision(
 
     if decision == "resolve":
         return "resolve"
+
+    if decision == "propose_tool":
+        return "propose_tool"
 
     return "escalate"
 
@@ -357,6 +425,11 @@ def build_graph():
     )
 
     graph.add_node(
+        "tool_proposal",
+        tool_proposal_node,
+    )
+
+    graph.add_node(
         "decision",
         decision_node,
     )
@@ -388,6 +461,11 @@ def build_graph():
 
     graph.add_edge(
         "investigation",
+        "tool_proposal",
+    )
+
+    graph.add_edge(
+        "tool_proposal",
         "decision",
     )
 
@@ -397,6 +475,7 @@ def build_graph():
         {
             "resolve": "resolve",
             "escalate": "escalate",
+            "propose_tool": END,
         },
     )
 

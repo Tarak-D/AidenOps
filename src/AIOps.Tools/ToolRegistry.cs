@@ -51,7 +51,8 @@ public sealed class ToolRegistry : IToolRegistry
                 tool.Name,
                 tool.Description,
                 tool.Risk,
-                tool.RequiresApproval))
+                tool.RequiresApproval,
+                tool.InputSchemaJson))
             .ToArray();
     }
 }

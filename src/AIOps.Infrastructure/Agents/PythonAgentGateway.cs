@@ -32,7 +32,15 @@ public sealed class PythonAgentGateway(
                 request.Ticket.Description,
                 request.Ticket.ReporterEmail,
                 request.Ticket.Domain.ToString(),
-                request.Ticket.Severity.ToString());
+                request.Ticket.Severity.ToString(),
+                request.AllowedTools.Select(tool => new PythonToolManifestEntry(
+                    tool.Name,
+                    tool.Description,
+                    tool.Risk.ToString(),
+                    tool.RequiresApproval,
+                    tool.InputSchemaJson)).ToArray(),
+                request.TriageConfidenceThreshold,
+                request.MaxAttempts);
 
             using var response =
                 await httpClient.PostAsJsonAsync(
@@ -141,6 +149,7 @@ public sealed class PythonAgentGateway(
             "AwaitingApproval" => AgentRunOutcome.AwaitingApproval,
             "Escalated" => AgentRunOutcome.Escalated,
             "Failed" => AgentRunOutcome.Failed,
+            "ProposalCreated" => AgentRunOutcome.ProposalCreated,
             _ => AgentRunOutcome.Failed
         };
 
@@ -269,7 +278,32 @@ public sealed class PythonAgentGateway(
         string Domain,
 
         [property: JsonPropertyName("severity")]
-        string Severity);
+        string Severity,
+
+        [property: JsonPropertyName("allowed_tools")]
+        IReadOnlyList<PythonToolManifestEntry> AllowedTools,
+
+        [property: JsonPropertyName("triage_confidence_threshold")]
+        double TriageConfidenceThreshold,
+
+        [property: JsonPropertyName("max_attempts")]
+        int MaxAttempts);
+
+    private sealed record PythonToolManifestEntry(
+        [property: JsonPropertyName("name")]
+        string Name,
+
+        [property: JsonPropertyName("description")]
+        string Description,
+
+        [property: JsonPropertyName("risk")]
+        string Risk,
+
+        [property: JsonPropertyName("requires_approval")]
+        bool RequiresApproval,
+
+        [property: JsonPropertyName("input_schema_json")]
+        string InputSchemaJson);
 
     private sealed record PythonResumeAgentRunRequest(
         [property: JsonPropertyName("correlation_id")]

@@ -1,5 +1,6 @@
 from fastapi import FastAPI
 from pydantic import BaseModel, Field
+import json
 
 from agent_service.graph import build_graph
 
@@ -14,14 +15,26 @@ class HealthResponse(BaseModel):
     status: str
 
 
+class AllowedToolManifestEntry(BaseModel):
+    name: str
+    description: str
+    risk: str
+    requires_approval: bool
+    input_schema_json: str
+
+
 class AgentRunRequest(BaseModel):
     correlation_id: str
     ticket_id: str
+    external_ref: str = ""
     title: str
     description: str
     reporter_email: str = ""
     domain: str = "Unknown"
     severity: str = "P3"
+    allowed_tools: list[AllowedToolManifestEntry] = Field(default_factory=list)
+    triage_confidence_threshold: float = 0.6
+    max_attempts: int = 2
 
 
 class ResumeAgentRunRequest(BaseModel):
@@ -115,6 +128,12 @@ async def start_agent_run(
             "title": request.title,
             "description": request.description,
             "reporter_email": request.reporter_email,
+            "external_ref": request.external_ref,
+            "allowed_tools": [
+                item.model_dump()
+                for item in request.allowed_tools
+            ],
+            "triage_confidence_threshold": request.triage_confidence_threshold,
         }
     )
 
@@ -123,11 +142,11 @@ async def start_agent_run(
         "escalate",
     )
 
-    if decision == "resolve":
-        outcome = "Resolved"
+    if decision == "propose_tool":
+        outcome = "ProposalCreated"
 
-    elif decision == "propose_tool":
-        outcome = "AwaitingApproval"
+    elif decision == "resolve":
+        outcome = "Resolved"
 
     else:
         outcome = "Escalated"
@@ -138,6 +157,19 @@ async def start_agent_run(
             [],
         )
     )
+
+    proposal = result.get("tool_proposal")
+    api_proposal = None
+    if proposal is not None:
+        api_proposal = {
+            "tool_name": proposal["tool_name"],
+            "arguments_json": json.dumps(
+                proposal["arguments"],
+                separators=(",", ":"),
+            ),
+            "confidence": proposal["confidence"],
+            "justification": proposal["justification"],
+        }
 
     return AgentRunResponse(
         correlation_id=request.correlation_id,
@@ -156,9 +188,7 @@ async def start_agent_run(
                 0.0,
             ),
         },
-        tool_proposal=result.get(
-            "tool_proposal",
-        ),
+        tool_proposal=api_proposal,
         trace=trace,
         error=result.get(
             "error",

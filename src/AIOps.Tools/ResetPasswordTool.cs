@@ -27,6 +27,10 @@ public sealed class ResetPasswordTool : ITool
 
     public RiskLevel Risk => RiskLevel.Sensitive;
 
+    public string InputSchemaJson => """
+        {"type":"object","properties":{"userPrincipalName":{"type":"string","minLength":1}},"required":["userPrincipalName"],"additionalProperties":false}
+        """;
+
     public bool RequiresApproval => true;
 
     public async Task<ToolResult> ExecuteAsync(

@@ -27,6 +27,10 @@ public sealed class UpdateTicketTool : ITool
 
     public RiskLevel Risk => RiskLevel.Moderate;
 
+    public string InputSchemaJson => """
+        {"type":"object","properties":{"externalRef":{"type":"string","minLength":1},"note":{"type":"string","minLength":1},"state":{"type":"string"}},"required":["externalRef","note"],"additionalProperties":false}
+        """;
+
     public bool RequiresApproval => true;
 
     public async Task<ToolResult> ExecuteAsync(

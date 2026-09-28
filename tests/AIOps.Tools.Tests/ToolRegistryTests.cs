@@ -10,6 +10,7 @@ public sealed class ToolRegistryTests
         public string Name { get; }
         public string Description { get; }
         public RiskLevel Risk { get; }
+        public string InputSchemaJson { get; } = "{\"type\":\"object\",\"properties\":{},\"additionalProperties\":false}";
 
         public TestTool(string name, string description, RiskLevel risk)
         {
@@ -116,5 +117,8 @@ public sealed class ToolRegistryTests
 
         Assert.Equal(RiskLevel.Sensitive, sensitive.Risk);
         Assert.True(sensitive.RequiresApproval);
+        Assert.Equal(
+            "{\"type\":\"object\",\"properties\":{},\"additionalProperties\":false}",
+            safe.InputSchemaJson);
     }
 }

@@ -1,3 +1,5 @@
+import json
+
 from fastapi.testclient import TestClient
 
 from agent_service.main import app
@@ -78,7 +80,7 @@ def test_agent_run_network_uses_langgraph(
     assert body["tool_proposal"] is None
     assert body["error"] is None
 
-    assert len(body["trace"]) == 5
+    assert len(body["trace"]) == 6
 
     assert body["trace"][0]["agent"] == "TriageAgent"
     assert body["trace"][0]["step"] == "triage"
@@ -89,10 +91,12 @@ def test_agent_run_network_uses_langgraph(
     assert body["trace"][2]["agent"] == "InvestigationAgent"
     assert body["trace"][2]["step"] == "investigation"
 
-    assert body["trace"][3]["agent"] == "DecisionAgent"
-    assert body["trace"][3]["step"] == "decision"
+    assert body["trace"][3]["agent"] == "ToolProposalAgent"
+    assert body["trace"][3]["step"] == "tool_proposal"
 
-    assert body["trace"][4]["step"] == "resolve"
+    assert body["trace"][4]["agent"] == "DecisionAgent"
+    assert body["trace"][4]["step"] == "decision"
+    assert body["trace"][5]["step"] == "resolve"
 
 
 def test_agent_run_unknown_escalates(
@@ -135,13 +139,89 @@ def test_agent_run_unknown_escalates(
     assert body["tool_proposal"] is None
     assert body["error"] is None
 
-    assert len(body["trace"]) == 5
+    assert len(body["trace"]) == 6
 
     assert body["trace"][0]["agent"] == "TriageAgent"
     assert body["trace"][1]["agent"] == "KnowledgeAgent"
     assert body["trace"][2]["agent"] == "InvestigationAgent"
-    assert body["trace"][3]["agent"] == "DecisionAgent"
-    assert body["trace"][4]["step"] == "escalate"
+    assert body["trace"][3]["agent"] == "ToolProposalAgent"
+    assert body["trace"][4]["agent"] == "DecisionAgent"
+    assert body["trace"][5]["step"] == "escalate"
+
+
+def test_agent_run_returns_allowlisted_proposal_without_execution(
+    monkeypatch,
+):
+    monkeypatch.setenv("AGENT_LLM_PROVIDER", "deterministic")
+    monkeypatch.setattr(graph, "retrieve_knowledge", fake_retrieve_knowledge)
+
+    response = client.post(
+        "/api/v1/agent/runs",
+        json={
+            "correlation_id": "00000000-0000-0000-0000-000000000009",
+            "ticket_id": "00000000-0000-0000-0000-000000000010",
+            "external_ref": "INC-10",
+            "title": "VPN is unavailable",
+            "description": "The reporter cannot connect.",
+            "reporter_email": "user@example.com",
+            "allowed_tools": [
+                {
+                    "name": "Network.RunVpnDiagnostics",
+                    "description": "Runs read-only VPN diagnostics.",
+                    "risk": "Safe",
+                    "requires_approval": False,
+                    "input_schema_json": (
+                        '{"type":"object","properties":'
+                        '{"userOrDeviceId":{"type":"string"}},'
+                        '"required":["userOrDeviceId"],'
+                        '"additionalProperties":false}'
+                    ),
+                }
+            ],
+        },
+    )
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["outcome"] == "ProposalCreated"
+    assert body["tool_proposal"]["tool_name"] == "Network.RunVpnDiagnostics"
+    assert json.loads(body["tool_proposal"]["arguments_json"]) == {
+        "userOrDeviceId": "user@example.com"
+    }
+    assert any(item["agent"] == "ToolProposalAgent" for item in body["trace"])
+
+
+def test_agent_run_skips_proposal_below_server_threshold(
+    monkeypatch,
+):
+    monkeypatch.setenv("AGENT_LLM_PROVIDER", "deterministic")
+    monkeypatch.setattr(graph, "retrieve_knowledge", fake_retrieve_knowledge)
+
+    response = client.post(
+        "/api/v1/agent/runs",
+        json={
+            "correlation_id": "00000000-0000-0000-0000-000000000011",
+            "ticket_id": "00000000-0000-0000-0000-000000000012",
+            "title": "VPN is unavailable",
+            "description": "The reporter cannot connect.",
+            "reporter_email": "user@example.com",
+            "triage_confidence_threshold": 0.8,
+            "allowed_tools": [
+                {
+                    "name": "Network.RunVpnDiagnostics",
+                    "description": "Runs read-only VPN diagnostics.",
+                    "risk": "Safe",
+                    "requires_approval": False,
+                    "input_schema_json": "{}",
+                }
+            ],
+        },
+    )
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["tool_proposal"] is None
+    assert body["trace"][3]["model"] == "deterministic/policy"
 
 
 def test_agent_run_resume_success():

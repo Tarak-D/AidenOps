@@ -1,10 +1,13 @@
 using AIOps.Abstractions.Agents;
 using AIOps.Abstractions.Audit;
+using AIOps.Abstractions.Configuration;
 using AIOps.Abstractions.Grains;
+using AIOps.Abstractions.Tools;
 using AIOps.Domain;
 using AIOps.Contracts.Api;
 using AIOps.Contracts.AgentGateway;
 using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Options;
 
 namespace AIOps.Orchestration;
 
@@ -18,13 +21,26 @@ public sealed class Orchestrator
     private readonly IClusterClient _cluster;
     private readonly IAuditStore _auditStore;
     private readonly IAgentGateway _agentGateway;
+    private readonly IToolRegistry _toolRegistry;
+    private readonly Agents.ToolProposalValidationService _proposalValidation;
+    private readonly AgentPolicyOptions _agentPolicyOptions;
     private readonly ILogger<Orchestrator> _logger;
 
-    public Orchestrator(IClusterClient cluster, IAuditStore auditStore, IAgentGateway agentGateway, ILogger<Orchestrator> logger)
+    public Orchestrator(
+        IClusterClient cluster,
+        IAuditStore auditStore,
+        IAgentGateway agentGateway,
+        IToolRegistry toolRegistry,
+        Agents.ToolProposalValidationService proposalValidation,
+        IOptions<AgentPolicyOptions> agentPolicyOptions,
+        ILogger<Orchestrator> logger)
     {
         _cluster = cluster;
         _auditStore = auditStore;
         _agentGateway = agentGateway;
+        _toolRegistry = toolRegistry;
+        _proposalValidation = proposalValidation;
+        _agentPolicyOptions = agentPolicyOptions.Value;
         _logger = logger;
     }
 
@@ -70,7 +86,34 @@ public sealed class Orchestrator
         if (!state.Exists)
             throw new DomainInvariantViolationException($"Ticket {ticketId} does not exist.");
 
-        var result = await _agentGateway.StartRunAsync(request, ct);
+        if (request.Ticket.TicketId != ticketId)
+        {
+            throw new DomainInvariantViolationException(
+                "Agent run ticket context does not match the requested ticket.");
+        }
+
+        // The manifest is always rebuilt from registered server-side tools.
+        // Caller-supplied or model-supplied risk/schema data is never authoritative.
+        var serverRequest = request with
+        {
+            AllowedTools = _toolRegistry.Describe()
+                .Select(tool => new ToolManifestEntry(
+                    tool.Name,
+                    tool.Description,
+                    tool.Risk,
+                    tool.RequiresApproval,
+                    tool.InputSchemaJson))
+                .ToArray(),
+            TriageConfidenceThreshold = _agentPolicyOptions.TriageConfidenceThreshold,
+            MaxAttempts = _agentPolicyOptions.MaxAttempts
+        };
+
+        var result = await _agentGateway.StartRunAsync(serverRequest, ct);
+        result = await _proposalValidation.ValidateAndPersistAsync(
+            ticketId,
+            request.CorrelationId,
+            result,
+            ct);
         await _auditStore.AppendAsync(new AuditRecordInput(
             CorrelationId: request.CorrelationId,
             ActorType: ActorKind.Agent,

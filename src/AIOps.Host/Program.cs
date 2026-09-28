@@ -6,6 +6,7 @@ using AIOps.Host.Hubs;
 using AIOps.Host.Security;
 using AIOps.Infrastructure;
 using AIOps.Orchestration.Approvals;
+using AIOps.Orchestration.Agents;
 using Microsoft.AspNetCore.Mvc;
 using MudBlazor.Services;
 using Serilog;
@@ -70,6 +71,8 @@ builder.Services.AddScoped<
     AIOps.Orchestration.Tickets.TicketService>();
 
 builder.Services.AddScoped<ApprovalService>();
+builder.Services.AddScoped<ToolProposalValidationService>();
+builder.Services.AddScoped<AIOps.Orchestration.Orchestrator>();
 
 var app = builder.Build();
 

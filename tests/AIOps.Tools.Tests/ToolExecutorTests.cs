@@ -21,6 +21,8 @@ public sealed class ToolExecutorTests
 
         public RiskLevel Risk { get; }
 
+        public string InputSchemaJson => "{\"type\":\"object\",\"properties\":{},\"additionalProperties\":false}";
+
         public bool RequiresApproval => Risk >= RiskLevel.Moderate;
 
         public string? LastArgumentsJson { get; private set; }

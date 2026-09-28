@@ -35,7 +35,10 @@ public sealed record ToolProposal(
     string ToolName,
     string ArgumentsJson,
     double Confidence,
-    string Justification);
+    string Justification,
+    RiskLevel? Risk = null,
+    bool? RequiresApproval = null,
+    Guid? ActionExecutionId = null);
 
 public sealed record StepTrace(
     string Agent,
@@ -52,7 +55,8 @@ public enum AgentRunOutcome
     Resolved = 0,
     AwaitingApproval = 1,
     Escalated = 2,
-    Failed = 3
+    Failed = 3,
+    ProposalCreated = 4
 }
 
 public sealed record AgentRunResult(

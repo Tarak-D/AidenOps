@@ -51,16 +51,17 @@ Phase 8  — Agent Evaluation & Observability
 Phase 9  — Python / LangGraph Agent Swarm
 Phase 10 — Multi-Provider LLM Integration
 Phase 11 — RAG Context Injection / Reasoning
+Phase 12 — Tool Proposal Agent
 ```
 
 ## Current phase
 
 ```text
-Phase 11 — RAG Context Injection / Reasoning
+Phase 12 — Tool Proposal Agent
 STATUS: COMPLETE
 
 Next phase:
-Phase 12 — Tool Proposal Agent
+Phase 13 — Approval-Aware Agent Loop
 STATUS: NEXT
 ```
 
@@ -88,7 +89,7 @@ The live NVIDIA NIM test was attempted but timed out.
 
 A live OpenRouter smoke test was completed successfully through the provider-independent LLM layer.
 
-## Phase 10 completion verification
+## Phase 10 completion verification (historical checkpoint)
 
 ```text
 Python test suite: 47 passed, 1 warning
@@ -101,7 +102,7 @@ GitHub phase-10-complete tag: pushed
 
 The remaining warning is a Starlette/AnyIO dependency deprecation warning and does not fail the Python test suite.
 
-## Last completed Git checkpoint
+## Phase 10 Git checkpoint
 
 ```text
 phase-10-complete
@@ -113,7 +114,7 @@ Latest completed Phase 10 commit:
 1026ddd Implement Phase 10 multi-provider LLM integration
 ```
 
-Phase 10 is complete and is now the baseline for the next implementation phase.
+Phase 10 formed the provider-integration baseline for Phase 11.
 
 ---
 
@@ -2564,7 +2565,7 @@ knowledge_documents: 0
 knowledge_chunks: 0
 ```
 
-Latest Phase 11 commits:
+Phase 11 checkpoint commits:
 
 ```text
 6690f5d Implement Phase 11 RAG investigation
@@ -2575,17 +2576,17 @@ The deterministic embedding generator remains the bootstrap/test implementation.
 
 There is no phase-11-complete Git tag at this checkpoint.
 
-Phase 11 is now the baseline for:
+Phase 11 formed the reasoning baseline for:
 
 ```text
-Phase 12 — Tool Proposal Agent
+Phase 12 — Tool Proposal Agent (complete)
 ```
 
 ---
 
 # 74. Phase 12 — Tool Proposal Agent
 
-After knowledge context is integrated:
+Phase 12 adds a proposal-only agent step after triage, retrieval, and investigation.
 
 ```text
 Reasoning
@@ -2607,10 +2608,44 @@ Triage
 Knowledge
 Investigation
 Tool manifest
-Policy context
+Server-supplied risk and approval metadata
+Server-owned JSON input schema
+Server-configured triage confidence threshold
 ```
 
-The model still should not execute the tool.
+The .NET control plane builds the manifest from the registered `ITool` instances. Each registered
+tool supplies its server-owned JSON Schema. The Python gateway receives the manifest and may return
+at most one proposal with a tool name, JSON arguments, confidence, and justification. It never
+receives a tool execution capability.
+
+The .NET `ToolProposalValidationService` independently verifies that the proposed tool is
+registered, validates the arguments against its server-owned schema, and obtains risk and approval
+requirements from the registered tool. LLM-supplied risk is not part of the proposal contract.
+Unknown tools and invalid proposals are rejected, escalated, and audited. Proposals are skipped
+when the server-configured triage confidence threshold is not met or investigation already
+recommends resolution/escalation.
+
+A valid proposal is persisted as an `ActionExecution` in `Proposed` status. Its server-derived risk,
+approval requirement, and action ID are returned with the proposal and recorded in the audit store.
+No approval request is created and no tool is executed in Phase 12; the approval-aware loop remains
+Phase 13 work.
+
+The LangGraph workflow now includes `ToolProposalAgent` between investigation and the final
+decision. Deterministic mode proposes only when a registered tool clearly matches the incident and
+has sufficient arguments; provider mode asks the configured LLM for structured JSON constrained by
+the supplied allowlist.
+
+Phase 12 coverage includes tool schema manifests, Python allowlist handling and proposal output,
+.NET schema validation and classification, persistence/audit behavior, and rejection paths.
+
+## Phase 12 completion verification
+
+```text
+.NET test suite: 151 passed, 0 failed
+Python test suite: 82 passed, 1 Starlette/AnyIO deprecation warning
+Tool execution from proposals: not implemented
+Approval creation/resume loop: remains Phase 13
+```
 
 ---
 
@@ -2842,15 +2877,16 @@ Phase 8   COMPLETE
 Phase 9   COMPLETE
 Phase 10  COMPLETE
 Phase 11  COMPLETE
+Phase 12  COMPLETE
 
 Current completed checkpoint:
-Phase 11 — RAG Context Injection / Reasoning
+Phase 12 — Tool Proposal Agent
 
-Latest Phase 11 commits:
+Phase 11 checkpoint commits:
 6690f5d
 88352fe
 
-Current Phase 11 architecture:
+Current Phase 12 architecture:
 .NET Knowledge API
         ↓
 PostgreSQL + pgvector
@@ -2863,7 +2899,11 @@ Knowledge Context
         ↓
 InvestigationAgent
         ↓
-Investigation-aware DecisionAgent
+ToolProposalAgent
+        ↓
+.NET proposal validation
+        ↓
+Proposed ActionExecution + audit
 
 Providers implemented:
 - deterministic
@@ -2884,7 +2924,7 @@ Phase 11 live RAG verification:
 Succeeded
 
 Next architectural phase:
-Phase 12 — Tool Proposal Agent
+Phase 13 — Approval-Aware Agent Loop
 =============================================
 ```
 
@@ -2998,8 +3038,12 @@ Evaluation
 
 Phase 11 completed the connection between the authoritative .NET/PostgreSQL RAG subsystem and the Python LangGraph reasoning workflow.
 
+Phase 12 completed allowlisted Python tool proposals, server-owned schema validation, server-side risk
+classification, and persistence/audit of proposed actions. It does not execute tools or create
+approval requests.
+
 The immediate next step is:
 
 ```text
-Phase 12 — Tool Proposal Agent
+Phase 13 — Approval-Aware Agent Loop
 ```

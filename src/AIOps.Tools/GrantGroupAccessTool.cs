@@ -27,6 +27,10 @@ public sealed class GrantGroupAccessTool : ITool
 
     public RiskLevel Risk => RiskLevel.Sensitive;
 
+    public string InputSchemaJson => """
+        {"type":"object","properties":{"userPrincipalName":{"type":"string","minLength":1},"groupId":{"type":"string","minLength":1}},"required":["userPrincipalName","groupId"],"additionalProperties":false}
+        """;
+
     public bool RequiresApproval => true;
 
     public async Task<ToolResult> ExecuteAsync(

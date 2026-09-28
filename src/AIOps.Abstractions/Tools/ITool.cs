@@ -22,11 +22,18 @@ public interface ITool
     string Name { get; }           // e.g. "Identity.ResetPassword"
     string Description { get; }
     RiskLevel Risk { get; }
+    /// <summary>Server-owned JSON Schema used to describe and validate proposed arguments.</summary>
+    string InputSchemaJson { get; }
     bool RequiresApproval => Risk >= RiskLevel.Moderate;
     Task<ToolResult> ExecuteAsync(string argumentsJson, ToolExecutionContext ctx, CancellationToken ct = default);
 }
 
-public sealed record ToolDescriptor(string Name, string Description, RiskLevel Risk, bool RequiresApproval);
+public sealed record ToolDescriptor(
+    string Name,
+    string Description,
+    RiskLevel Risk,
+    bool RequiresApproval,
+    string InputSchemaJson);
 
 public interface IToolRegistry
 {
