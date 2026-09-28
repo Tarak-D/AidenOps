@@ -16,6 +16,19 @@ public interface ICloudProvider
     Task<string> GetInstanceStatusAsync(string instanceId, CancellationToken ct = default);
 }
 
+/// <summary>Resolved cloud provider identity for status and operator visibility.</summary>
+public sealed record CloudProviderStatus(
+    string ConfiguredProvider,
+    string ActiveProvider,
+    string DisplayName,
+    string Mode,
+    bool IsProduction);
+
+public interface ICloudProviderStatusService
+{
+    CloudProviderStatus GetStatus();
+}
+
 /// <summary>ITSM connector (ServiceNow-style). SIMULATION ONLY.</summary>
 public interface IItsmConnector
 {

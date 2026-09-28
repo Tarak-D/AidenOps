@@ -1,5 +1,17 @@
 ﻿@inherits LayoutComponentBase
 
+@inject AIOps.Abstractions.Integrations.ICloudProviderStatusService CloudProviderStatusService
+
+@{
+    var cloudProviderStatus = CloudProviderStatusService.GetStatus();
+    var cloudProviderLabel = cloudProviderStatus.IsProduction
+        ? $"{cloudProviderStatus.DisplayName} — REAL"
+        : cloudProviderStatus.DisplayName.ToUpperInvariant();
+    var cloudProviderColor = cloudProviderStatus.IsProduction
+        ? Color.Error
+        : Color.Success;
+}
+
 <MudThemeProvider />
 <MudPopoverProvider />
 <MudDialogProvider />
@@ -10,6 +22,9 @@
         <MudIcon Icon="@Icons.Material.Filled.SmartToy" Class="mr-2" />
         <MudText Typo="Typo.h6">AIOps Agent Platform</MudText>
         <MudSpacer />
+        <MudChip T="string" Color="@cloudProviderColor" Variant="Variant.Filled" Size="Size.Small">
+            Cloud Provider: @cloudProviderLabel
+        </MudChip>
         <MudChip T="string" Color="Color.Info" Variant="Variant.Outlined" Size="Size.Small">Phase 1 — Foundation</MudChip>
     </MudAppBar>
     <MudMainContent Class="pa-6">

@@ -26,7 +26,7 @@ public sealed class AwsEc2CloudProviderTests
                 It.IsAny<DescribeInstancesRequest>(),
                 It.IsAny<CancellationToken>()))
             .ReturnsAsync(Describe("i-123", InstanceStateName.Stopped));
-        var provider = new AwsEc2CloudProvider(ec2.Object, DefaultOptions);
+        var provider = CreateProvider(ec2, DefaultOptions);
 
         var result = await provider.GetInstanceStatusAsync("i-123");
 
@@ -49,7 +49,7 @@ public sealed class AwsEc2CloudProviderTests
             {
                 Reservations = []
             });
-        var provider = new AwsEc2CloudProvider(ec2.Object, DefaultOptions);
+        var provider = CreateProvider(ec2, DefaultOptions);
 
         var error = await Assert.ThrowsAsync<AwsCloudProviderException>(
             () => provider.GetInstanceStatusAsync("i-missing"));
@@ -66,7 +66,7 @@ public sealed class AwsEc2CloudProviderTests
                 It.IsAny<RebootInstancesRequest>(),
                 It.IsAny<CancellationToken>()))
             .ReturnsAsync(new RebootInstancesResponse());
-        var provider = new AwsEc2CloudProvider(ec2.Object, DefaultOptions);
+        var provider = CreateProvider(ec2, DefaultOptions);
 
         var result = await provider.RestartInstanceAsync("i-123");
 
@@ -86,7 +86,7 @@ public sealed class AwsEc2CloudProviderTests
                 It.IsAny<DescribeInstancesRequest>(),
                 It.IsAny<CancellationToken>()))
             .ThrowsAsync(new AmazonClientException(sensitiveMessage));
-        var provider = new AwsEc2CloudProvider(ec2.Object, DefaultOptions);
+        var provider = CreateProvider(ec2, DefaultOptions);
 
         var error = await Assert.ThrowsAsync<AwsCloudProviderException>(
             () => provider.GetInstanceStatusAsync("i-123"));
@@ -104,7 +104,7 @@ public sealed class AwsEc2CloudProviderTests
                 It.IsAny<DescribeInstancesRequest>(),
                 It.IsAny<CancellationToken>()))
             .ThrowsAsync(new InvalidOperationException(sensitiveMessage));
-        var provider = new AwsEc2CloudProvider(ec2.Object, DefaultOptions);
+        var provider = CreateProvider(ec2, DefaultOptions);
 
         var error = await Assert.ThrowsAsync<AwsCloudProviderException>(
             () => provider.GetInstanceStatusAsync("i-123"));
@@ -130,7 +130,7 @@ public sealed class AwsEc2CloudProviderTests
             {
                 StatusCode = statusCode
             });
-        var provider = new AwsEc2CloudProvider(ec2.Object, DefaultOptions);
+        var provider = CreateProvider(ec2, DefaultOptions);
 
         var error = await Assert.ThrowsAsync<AwsCloudProviderException>(
             () => provider.GetInstanceStatusAsync("i-123"));
@@ -148,8 +148,8 @@ public sealed class AwsEc2CloudProviderTests
                 It.IsAny<CancellationToken>()))
             .Returns<DescribeInstancesRequest, CancellationToken>(
                 (_, token) => WaitForDescribeAsync(token));
-        var provider = new AwsEc2CloudProvider(
-            ec2.Object,
+        var provider = CreateProvider(
+            ec2,
             Options.Create(new CloudIntegrationOptions { TimeoutSeconds = 1 }));
 
         var error = await Assert.ThrowsAsync<AwsCloudProviderException>(
@@ -167,7 +167,7 @@ public sealed class AwsEc2CloudProviderTests
                 It.IsAny<CancellationToken>()))
             .Returns<DescribeInstancesRequest, CancellationToken>(
                 (_, token) => WaitForDescribeAsync(token));
-        var provider = new AwsEc2CloudProvider(ec2.Object, DefaultOptions);
+        var provider = CreateProvider(ec2, DefaultOptions);
         using var cancellation = new CancellationTokenSource();
         cancellation.Cancel();
 
@@ -248,6 +248,11 @@ public sealed class AwsEc2CloudProviderTests
         services.AddAIOpsInfrastructure(config);
         return services.BuildServiceProvider();
     }
+
+    private static AwsEc2CloudProvider CreateProvider(
+        Mock<IAmazonEC2> ec2,
+        IOptions<CloudIntegrationOptions> options) =>
+        new(new Lazy<IAmazonEC2>(() => ec2.Object), options);
 
     private static DescribeInstancesResponse Describe(
         string instanceId,

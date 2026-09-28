@@ -94,12 +94,18 @@ public static class DependencyInjection
 
                     return new AmazonEC2Client(awsConfig);
                 });
+                services.AddSingleton(serviceProvider =>
+                    new Lazy<IAmazonEC2>(
+                        () => serviceProvider.GetRequiredService<IAmazonEC2>()));
                 services.AddSingleton<ICloudProvider, AwsEc2CloudProvider>();
                 break;
             default:
                 throw new InvalidOperationException(
                     "Integrations:Cloud:Provider must be 'Simulated' or 'AwsEc2'.");
         }
+        services.AddSingleton<
+            ICloudProviderStatusService,
+            CloudProviderStatusService>();
         services.AddSingleton<IDirectoryService, SimulatedDirectoryService>();
         services.AddSingleton<IItsmConnector, SimulatedItsmConnector>();
         services.AddSingleton<INetworkDiagnostics, SimulatedNetworkDiagnostics>();

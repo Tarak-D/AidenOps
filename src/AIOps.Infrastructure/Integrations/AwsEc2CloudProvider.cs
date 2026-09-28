@@ -15,11 +15,11 @@ namespace AIOps.Infrastructure.Integrations;
 /// </summary>
 public sealed class AwsEc2CloudProvider : ICloudProvider
 {
-    private readonly IAmazonEC2 _ec2;
+    private readonly Lazy<IAmazonEC2> _ec2;
     private readonly TimeSpan _timeout;
 
     public AwsEc2CloudProvider(
-        IAmazonEC2 ec2,
+        Lazy<IAmazonEC2> ec2,
         IOptions<CloudIntegrationOptions> options)
     {
         ArgumentNullException.ThrowIfNull(ec2);
@@ -48,7 +48,7 @@ public sealed class AwsEc2CloudProvider : ICloudProvider
         };
 
         var response = await ExecuteAsync(
-            token => _ec2.DescribeInstancesAsync(request, token),
+            token => _ec2.Value.DescribeInstancesAsync(request, token),
             ct);
 
         var instance = response.Reservations?
@@ -96,7 +96,7 @@ public sealed class AwsEc2CloudProvider : ICloudProvider
         await ExecuteAsync(
             async token =>
             {
-                await _ec2.RebootInstancesAsync(request, token);
+                await _ec2.Value.RebootInstancesAsync(request, token);
                 return true;
             },
             ct);

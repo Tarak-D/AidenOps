@@ -35,12 +35,12 @@
         <MudCard Elevation="2">
             <MudCardHeader><CardHeaderContent><MudText Typo="Typo.h6">Governance</MudText></CardHeaderContent></MudCardHeader>
             <MudCardContent>
-                <MudText>Sensitive actions require human approval. All actions are simulated. Audit is append-only by design.</MudText>
+                <MudText>Sensitive actions require human approval. Cloud actions use the provider shown in the header. Audit is append-only by design.</MudText>
             </MudCardContent>
         </MudCard>
     </MudItem>
 </MudGrid>
 
 <MudText Typo="Typo.body2" Class="mt-6" Color="Color.Secondary">
-    Ops endpoints: <code>/health</code>, <code>/api/v1/meta/selfcheck</code>, <code>/api/v1/meta/config</code>
+    Ops endpoints: <code>/health</code>, <code>/api/v1/meta/selfcheck</code>, <code>/api/v1/meta/config</code>, <code>/api/v1/integrations/cloud/status</code>
 </MudText>
