@@ -2,7 +2,7 @@ from fastapi import FastAPI
 from pydantic import BaseModel, Field
 import json
 
-from agent_service.graph import build_graph
+from agent_service.graph import build_graph, build_resume_graph
 
 
 app = FastAPI(
@@ -40,10 +40,14 @@ class AgentRunRequest(BaseModel):
 class ResumeAgentRunRequest(BaseModel):
     correlation_id: str
     ticket_id: str
-    approval_granted: bool
+    approval_granted: bool = False
     approval_decided_by: str | None = None
     tool_result_json: str | None = None
-    tool_execution_succeeded: bool
+    tool_execution_succeeded: bool = False
+    action_execution_id: str = ""
+    approval_status: str | None = None
+    action_status: str = ""
+    tool_execution_error: str | None = None
 
 
 class AgentRunResponse(BaseModel):
@@ -203,52 +207,21 @@ async def start_agent_run(
 async def resume_agent_run(
     request: ResumeAgentRunRequest,
 ) -> AgentRunResponse:
-    if (
-        request.approval_granted
-        and request.tool_execution_succeeded
-    ):
-        return AgentRunResponse(
-            correlation_id=request.correlation_id,
-            outcome="Resolved",
-            triage={},
-            tool_proposal=None,
-            trace=[
-                {
-                    "agent": "ValidationAgent",
-                    "step": "verify",
-                    "model": "deterministic/bootstrap",
-                    "prompt_version": "v0-bootstrap",
-                    "prompt_tokens": 0,
-                    "completion_tokens": 0,
-                    "latency_ms": 0.0,
-                    "summary": (
-                        "Post-action verification "
-                        "reported success."
-                    ),
-                }
-            ],
-            error=None,
-        )
-
+    result = build_resume_graph().invoke({
+        "correlation_id": request.correlation_id,
+        "ticket_id": request.ticket_id,
+        "action_execution_id": request.action_execution_id,
+        "action_status": request.action_status,
+        "approval_status": request.approval_status,
+        "approval_decided_by": request.approval_decided_by,
+        "tool_result_json": request.tool_result_json,
+        "tool_execution_error": request.tool_execution_error,
+    })
     return AgentRunResponse(
         correlation_id=request.correlation_id,
-        outcome="Escalated",
+        outcome=result["outcome"],
         triage={},
         tool_proposal=None,
-        trace=[
-            {
-                "agent": "ValidationAgent",
-                "step": "verify",
-                "model": "deterministic/bootstrap",
-                "prompt_version": "v0-bootstrap",
-                "prompt_tokens": 0,
-                "completion_tokens": 0,
-                "latency_ms": 0.0,
-                "summary": (
-                    "Approval was not granted or "
-                    "tool execution did not succeed."
-                ),
-            }
-        ],
-        error=None,
+        trace=_normalize_api_trace(result.get("trace", [])),
+        error=result.get("error"),
     )

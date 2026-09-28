@@ -65,6 +65,7 @@ builder.Services.AddSingleton<ITool, UpdateTicketTool>();
 builder.Services.AddSingleton<ITool, RunVpnDiagnosticsTool>();
 
 builder.Services.AddSingleton<IToolRegistry, ToolRegistry>();
+builder.Services.AddScoped<ToolExecutor>();
 
 // --- Application services (ticket lifecycle orchestration + approvals) ---
 builder.Services.AddScoped<

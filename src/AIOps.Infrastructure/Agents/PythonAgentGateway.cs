@@ -96,7 +96,11 @@ public sealed class PythonAgentGateway(
                 request.ApprovalGranted,
                 request.ApprovalDecidedBy,
                 request.ToolResultJson,
-                request.ToolExecutionSucceeded);
+                request.ToolExecutionSucceeded,
+                request.ActionExecutionId.ToString(),
+                request.ApprovalStatus,
+                request.ActionStatus,
+                request.ToolExecutionError);
 
             using var response =
                 await httpClient.PostAsJsonAsync(
@@ -322,7 +326,19 @@ public sealed class PythonAgentGateway(
         string? ToolResultJson,
 
         [property: JsonPropertyName("tool_execution_succeeded")]
-        bool ToolExecutionSucceeded);
+        bool ToolExecutionSucceeded,
+
+        [property: JsonPropertyName("action_execution_id")]
+        string ActionExecutionId,
+
+        [property: JsonPropertyName("approval_status")]
+        string? ApprovalStatus,
+
+        [property: JsonPropertyName("action_status")]
+        string? ActionStatus,
+
+        [property: JsonPropertyName("tool_execution_error")]
+        string? ToolExecutionError);
 
     private sealed class PythonAgentRunResponse
     {

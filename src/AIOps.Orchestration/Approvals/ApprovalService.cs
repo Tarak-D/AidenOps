@@ -139,9 +139,14 @@ public sealed class ApprovalService
         if (approval.IsExpired(now))
         {
             approval.Expire(now);
+            action.MarkRejected("Approval expired.");
 
             await _approvalStore.UpdateAsync(
                 approval,
+                ct);
+
+            await _actionStore.UpdateAsync(
+                action,
                 ct);
 
             await WriteAuditAsync(
@@ -166,7 +171,10 @@ public sealed class ApprovalService
         }
         else
         {
-            action.MarkRejected(comment);
+            action.MarkRejected(
+                string.IsNullOrWhiteSpace(comment)
+                    ? "Action rejected by approver."
+                    : comment);
         }
 
         await _approvalStore.UpdateAsync(
@@ -218,6 +226,26 @@ public sealed class ApprovalService
             if (approval.IsExpired(now))
             {
                 approval.Expire(now);
+                var action = await _actionStore.GetAsync(
+                    approval.ActionExecutionId,
+                    ct);
+
+                if (action is null)
+                {
+                    throw new DomainInvariantViolationException(
+                        $"Action execution {approval.ActionExecutionId} does not exist.");
+                }
+
+                if (action.Status is ActionStatus.Proposed or ActionStatus.AwaitingApproval)
+                {
+                    action.MarkRejected("Approval expired.");
+                    await _actionStore.UpdateAsync(action, ct);
+                }
+                else
+                {
+                    throw new DomainInvariantViolationException(
+                        $"Expired approval is bound to action {action.Id} in unexpected status {action.Status}.");
+                }
 
                 await _approvalStore.UpdateAsync(
                     approval,
@@ -247,9 +275,12 @@ public sealed class ApprovalService
         await _auditStore.AppendAsync(
             new AuditRecordInput(
                 CorrelationId: approval.ActionExecutionId,
-                ActorType: actorId == "system"
+                ActorType: actorId.Equals("system", StringComparison.OrdinalIgnoreCase)
                     ? ActorKind.System
-                    : ActorKind.Human,
+                    : actorId.Equals("ToolProposalAgent", StringComparison.OrdinalIgnoreCase) ||
+                      actorId.StartsWith("agent.", StringComparison.OrdinalIgnoreCase)
+                        ? ActorKind.Agent
+                        : ActorKind.Human,
                 ActorId: actorId,
                 EventType: eventType,
                 EntityType: "approval_request",
@@ -263,6 +294,7 @@ public sealed class ApprovalService
                     approval.RequestedBy,
                     approval.DecidedBy,
                     approval.DecidedAt,
+                    approval.DecisionComment,
                     approval.ExpiresAt
                 })),
             ct);

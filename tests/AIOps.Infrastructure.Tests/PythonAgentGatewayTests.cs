@@ -66,6 +66,38 @@ public sealed class PythonAgentGatewayTests
         Assert.Equal(2, payload.RootElement.GetProperty("max_attempts").GetInt32());
     }
 
+    [Fact]
+    public async Task ResumeRun_sends_server_derived_action_state()
+    {
+        var handler = new CapturingHandler("""
+            {"correlation_id":"00000000-0000-0000-0000-000000000001","outcome":"Escalated","trace":[]}
+            """);
+        using var client = new HttpClient(handler) { BaseAddress = new Uri("http://agent.test/") };
+        var gateway = new PythonAgentGateway(client, NullLogger<PythonAgentGateway>.Instance);
+        var actionId = Guid.Parse("00000000-0000-0000-0000-000000000003");
+        var ticketId = Guid.Parse("00000000-0000-0000-0000-000000000002");
+
+        await gateway.ResumeRunAsync(new ResumeAgentRunRequest(
+            actionId,
+            ticketId,
+            false,
+            "reviewer@example.com",
+            "persisted rejection",
+            false,
+            actionId,
+            "Rejected",
+            "Rejected",
+            "persisted rejection"));
+
+        using var payload = JsonDocument.Parse(handler.RequestBody!);
+        var root = payload.RootElement;
+        Assert.Equal(actionId.ToString(), root.GetProperty("action_execution_id").GetString());
+        Assert.Equal("Rejected", root.GetProperty("approval_status").GetString());
+        Assert.Equal("Rejected", root.GetProperty("action_status").GetString());
+        Assert.Equal("reviewer@example.com", root.GetProperty("approval_decided_by").GetString());
+        Assert.Equal("persisted rejection", root.GetProperty("tool_execution_error").GetString());
+    }
+
     private sealed class CapturingHandler(string responseJson) : HttpMessageHandler
     {
         public string? RequestBody { get; private set; }

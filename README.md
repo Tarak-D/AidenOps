@@ -52,17 +52,18 @@ Phase 9  — Python / LangGraph Agent Swarm
 Phase 10 — Multi-Provider LLM Integration
 Phase 11 — RAG Context Injection / Reasoning
 Phase 12 — Tool Proposal Agent
+Phase 13 — Approval-Aware Agent Loop
 ```
 
 ## Current phase
 
 ```text
-Phase 12 — Tool Proposal Agent
+Phase 13 — Approval-Aware Agent Loop
 STATUS: COMPLETE
 
-Next phase:
-Phase 13 — Approval-Aware Agent Loop
-STATUS: NEXT
+Next planned phase:
+Phase 14 — Production Integrations
+STATUS: PLANNED
 ```
 
 Phase 10 introduced the provider-independent Python LLM abstraction and support for multiple providers.
@@ -953,13 +954,15 @@ Start:
 POST /api/v1/agent/runs
 ```
 
-Resume:
+Resume (internal Python gateway route):
 
 ```http
 POST /api/v1/agent/runs/resume
 ```
 
-The resume endpoint accepts control-plane execution/approval information.
+The internal resume route receives execution and approval state assembled by
+the .NET control plane from persisted records. Public callers use the Host API
+resume route and cannot submit those values.
 
 Python does not directly execute privileged .NET tools.
 
@@ -1978,11 +1981,14 @@ Audit
 
 ---
 
-# 57. Resume Flow
+# 57. Server-Authoritative Resume Flow
 
-The agent can be resumed after an approval/execution decision.
+After approval or execution, the .NET Orchestrator validates the persisted
+ActionExecution and bound ApprovalRequest, then builds the Python gateway
+resume payload from those records. The Host API accepts only the ticket ID in
+the route and an ActionExecutionId selector in the request body.
 
-The resume contract includes:
+The internal .NET-to-Python gateway payload includes:
 
 ```text
 CorrelationId
@@ -1993,9 +1999,13 @@ ToolResultJson
 ToolExecutionSucceeded
 ```
 
-The Python service uses this information to produce the next agent outcome.
+The Python LangGraph resume node uses the supplied persisted action status and
+result to report the next outcome. Legacy gateway fields remain for wire
+compatibility; Host callers cannot set them, and the Orchestrator does not
+trust caller-provided approval or execution values.
 
-The execution itself remains outside Python.
+Python proposes tools and processes resume results only. The .NET control plane
+owns approval decisions, ToolExecutor invocation, action persistence, and audit.
 
 ---
 
@@ -2164,7 +2174,8 @@ Investigation is bootstrap/deterministic logic.
 Decision logic is bootstrap/deterministic logic.
 Python does not directly execute privileged tools.
 Full model-driven tool selection is not yet complete.
-Agent re-evaluation after real tool execution is not yet complete.
+Full model-driven agent re-evaluation after tool execution is not implemented;
+the current resume workflow reports the persisted result through LangGraph.
 Production cloud/ITSM/directory integrations are not yet complete.
 OpenRouter live verification succeeded.
 NVIDIA NIM live verification timed out.
@@ -2638,7 +2649,7 @@ the supplied allowlist.
 Phase 12 coverage includes tool schema manifests, Python allowlist handling and proposal output,
 .NET schema validation and classification, persistence/audit behavior, and rejection paths.
 
-## Phase 12 completion verification
+## Phase 12 completion verification (at the Phase 12 checkpoint)
 
 ```text
 .NET test suite: 151 passed, 0 failed
@@ -2649,29 +2660,42 @@ Approval creation/resume loop: remains Phase 13
 
 ---
 
-# 75. Phase 13 — Approval-Aware Agent Loop
+# 75. Phase 13 — Approval-Aware Agent Loop (Complete)
 
-The target loop becomes:
+Phase 13 connects validated Phase 12 proposals to the existing .NET approval,
+execution, audit, and resume lifecycle.
+
+The ActionExecution lifecycle is:
 
 ```text
-Proposal
-   ↓
-Risk Classification
-   ↓
-Approval Request
-   ↓
-Human Decision
-   ↓
-Execution
-   ↓
-Execution Result
-   ↓
-Agent Re-evaluation
-   ↓
-Resolve / Escalate
+Approval-required: Proposed → AwaitingApproval → Approved → Executing → Succeeded / Failed
+Safe:             Proposed → Executing → Succeeded / Failed
+Rejection:        AwaitingApproval → Rejected
+Expiration:       Pending approval → Expired; action → Rejected
 ```
 
-This will turn the current start/resume architecture into a more complete agent execution loop.
+Rejected and expired actions are not executed. Approved actions are checked
+against the persisted approval and executed through the .NET ToolExecutor.
+Execution results and failures are persisted before the Orchestrator resumes
+the agent workflow. Resume validation checks action/ticket identity, terminal
+state, approval consistency, and persisted result before calling the gateway.
+
+The Host API exposes:
+
+```http
+POST /api/v1/tickets/{id}/agent-runs
+POST /api/v1/tickets/{id}/agent-runs/resume
+```
+
+The resume request contains only an `ActionExecutionId` selector. Approval
+status, approver identity, execution status, and result are built by the
+Orchestrator from persisted .NET state. Resume and execution lifecycle events
+are audited through the existing audit store.
+
+Python remains proposal/resume-only: it can recommend tools and interpret the
+server-provided resume result, but it cannot approve actions or execute tools.
+The .NET control plane remains authoritative for the tool registry, policy,
+approval, execution, persistence, and audit.
 
 ---
 
@@ -2878,15 +2902,16 @@ Phase 9   COMPLETE
 Phase 10  COMPLETE
 Phase 11  COMPLETE
 Phase 12  COMPLETE
+Phase 13  COMPLETE
 
 Current completed checkpoint:
-Phase 12 — Tool Proposal Agent
+Phase 13 — Approval-Aware Agent Loop
 
 Phase 11 checkpoint commits:
 6690f5d
 88352fe
 
-Current Phase 12 architecture:
+Current Phase 13 architecture:
 .NET Knowledge API
         ↓
 PostgreSQL + pgvector
@@ -2903,7 +2928,17 @@ ToolProposalAgent
         ↓
 .NET proposal validation
         ↓
-Proposed ActionExecution + audit
+Persisted ActionExecution + audit
+        ↓
+ApprovalService (when required)
+        ↓
+.NET ToolExecutor after approval
+        ↓
+Persisted execution result
+        ↓
+Server-authoritative Orchestrator resume
+        ↓
+Python LangGraph resume workflow
 
 Providers implemented:
 - deterministic
@@ -2923,8 +2958,8 @@ Succeeded
 Phase 11 live RAG verification:
 Succeeded
 
-Next architectural phase:
-Phase 13 — Approval-Aware Agent Loop
+Next planned architectural phase:
+Phase 14 — Production Integrations
 =============================================
 ```
 
@@ -3039,11 +3074,14 @@ Evaluation
 Phase 11 completed the connection between the authoritative .NET/PostgreSQL RAG subsystem and the Python LangGraph reasoning workflow.
 
 Phase 12 completed allowlisted Python tool proposals, server-owned schema validation, server-side risk
-classification, and persistence/audit of proposed actions. It does not execute tools or create
-approval requests.
+classification, and persistence/audit of proposed actions.
 
-The immediate next step is:
+Phase 13 completed the server-side approval, ToolExecutor execution, persisted result, audit, and
+server-authoritative resume lifecycle. The Host API exposes ticket-scoped start and resume routes.
+Python proposes and processes resume results; .NET remains authoritative for approval and execution.
+
+The next planned phase is:
 
 ```text
-Phase 13 — Approval-Aware Agent Loop
+Phase 14 — Production Integrations
 ```

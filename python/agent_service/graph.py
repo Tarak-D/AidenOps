@@ -32,6 +32,20 @@ class AgentState(TypedDict, total=False):
     trace: list[dict]
 
 
+class ResumeAgentState(TypedDict, total=False):
+    correlation_id: str
+    ticket_id: str
+    action_execution_id: str
+    action_status: str
+    approval_status: str | None
+    approval_decided_by: str | None
+    tool_result_json: str | None
+    tool_execution_error: str | None
+    outcome: str
+    error: str | None
+    trace: list[dict]
+
+
 def _append_trace(
     state: AgentState,
     trace: dict,
@@ -489,4 +503,43 @@ def build_graph():
         END,
     )
 
+    return graph.compile()
+
+
+def resume_action_node(state: ResumeAgentState) -> ResumeAgentState:
+    """Continue the workflow using the action result supplied by .NET."""
+    action_status = state.get("action_status", "")
+    succeeded = action_status == "Succeeded"
+    result = state.get("tool_result_json") or "No result was persisted."
+    error = state.get("tool_execution_error")
+    if not succeeded and not error:
+        error = result
+
+    return {
+        **state,
+        "outcome": "Resolved" if succeeded else "Escalated",
+        "error": None if succeeded else error,
+        "trace": [{
+            "agent": "ValidationAgent",
+            "step": "resume",
+            "model": "deterministic/server-result",
+            "prompt_version": "v1-server-authoritative-resume",
+            "prompt_tokens": 0,
+            "completion_tokens": 0,
+            "latency_ms": 0.0,
+            "summary": (
+                f"Action {state.get('action_execution_id', '')} "
+                f"finished with persisted status {action_status}. "
+                f"Approval status: {state.get('approval_status') or 'NotRequired'}. "
+                f"Result: {result}"
+            ),
+        }],
+    }
+
+
+def build_resume_graph():
+    graph = StateGraph(ResumeAgentState)
+    graph.add_node("resume_action", resume_action_node)
+    graph.add_edge(START, "resume_action")
+    graph.add_edge("resume_action", END)
     return graph.compile()

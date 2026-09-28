@@ -23,6 +23,7 @@
     <ProjectReference Include="..\..\src\AIOps.Orchestration\AIOps.Orchestration.csproj" />
     <ProjectReference Include="..\..\src\AIOps.Abstractions\AIOps.Abstractions.csproj" />
     <ProjectReference Include="..\..\src\AIOps.Infrastructure\AIOps.Infrastructure.csproj" />
+    <ProjectReference Include="..\..\src\AIOps.Tools\AIOps.Tools.csproj" />
   </ItemGroup>
 
 </Project>

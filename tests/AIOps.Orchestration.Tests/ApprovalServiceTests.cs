@@ -54,6 +54,9 @@ public class ApprovalServiceTests
         Assert.Equal(
             "ApprovalRequested",
             auditStore.Records[0].EventType);
+        Assert.Equal(
+            ActorKind.Agent,
+            auditStore.Records[0].ActorType);
     }
 
     [Fact]
@@ -220,8 +223,40 @@ public class ApprovalServiceTests
             approval.Status);
 
         Assert.Equal(
-            ActionStatus.AwaitingApproval,
+            ActionStatus.Rejected,
             action.Status);
+        Assert.Equal("Approval expired.", action.ResultSummary);
+    }
+
+    [Fact]
+    public async Task Listing_pending_approvals_expires_and_rejects_the_action()
+    {
+        var action = CreateModerateAction();
+        action.MarkAwaitingApproval();
+        var actionStore = new FakeActionExecutionStore(action);
+        var approvalStore = new FakeApprovalStore();
+        var approval = ApprovalRequest.Create(
+            action.Id,
+            action.TicketId,
+            "agent.remediation",
+            "Restart unhealthy instance.",
+            Now,
+            TimeSpan.FromHours(24));
+        approvalStore.AddExisting(approval);
+        var auditStore = new FakeAuditStore();
+        var service = CreateService(
+            actionStore,
+            approvalStore,
+            auditStore,
+            new FakeClock(Now.AddHours(25)));
+
+        var pending = await service.ListPendingAsync();
+
+        Assert.Empty(pending);
+        Assert.Equal(ApprovalStatus.Expired, approval.Status);
+        Assert.Equal(ActionStatus.Rejected, action.Status);
+        Assert.Equal("Approval expired.", action.ResultSummary);
+        Assert.Contains(auditStore.Records, record => record.EventType == "ApprovalExpired");
     }
 
     [Fact]

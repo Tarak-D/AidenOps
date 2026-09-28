@@ -1,6 +1,7 @@
 using System.Security.Claims;
 using AIOps.Abstractions.Grains;
 using AIOps.Contracts.Api;
+using AIOps.Contracts.AgentGateway;
 using AIOps.Domain;
 using AIOps.Host.Security;
 using AIOps.Orchestration.Approvals;
@@ -131,6 +132,96 @@ public static class TicketsEndpoints
             .ProducesProblem(StatusCodes.Status404NotFound)
             .ProducesValidationProblem();
 
+        group.MapPost(
+            "/{id:guid}/agent-runs",
+            async (
+                Guid id,
+                AgentRunRequest req,
+                AIOps.Orchestration.Orchestrator orchestrator,
+                ILogger<Program> logger,
+                CancellationToken ct) =>
+            {
+                var errors = ValidateAgentRun(id, req);
+                if (errors.Count > 0)
+                    return Results.ValidationProblem(errors);
+
+                try
+                {
+                    return Results.Ok(
+                        await orchestrator.StartAgentRunAsync(id, req, ct));
+                }
+                catch (DomainInvariantViolationException ex)
+                {
+                    return AgentRunInvariantProblem(ex);
+                }
+                catch (Exception ex) when (ex is not OperationCanceledException)
+                {
+                    logger.LogError(ex, "Agent run failed for ticket {TicketId}.", id);
+                    return Results.Problem(
+                        title: "Agent run failed",
+                        detail: "The agent run could not be completed.",
+                        statusCode: StatusCodes.Status500InternalServerError);
+                }
+            })
+            .RequireAuthorization(AuthPolicies.CanCreateTicket)
+            .WithTags("Agent Runs")
+            .Produces<AgentRunResult>()
+            .ProducesValidationProblem()
+            .ProducesProblem(StatusCodes.Status404NotFound)
+            .ProducesProblem(StatusCodes.Status409Conflict)
+            .ProducesProblem(StatusCodes.Status500InternalServerError);
+
+        group.MapPost(
+            "/{id:guid}/agent-runs/resume",
+            async (
+                Guid id,
+                ResumeAgentRunApiRequest req,
+                AIOps.Orchestration.Orchestrator orchestrator,
+                ILogger<Program> logger,
+                CancellationToken ct) =>
+            {
+                if (req.ActionExecutionId == Guid.Empty)
+                {
+                    return Results.ValidationProblem(
+                        new Dictionary<string, string[]>
+                        {
+                            ["actionExecutionId"] = ["A valid action execution ID is required."]
+                        });
+                }
+
+                try
+                {
+                    return Results.Ok(
+                        await orchestrator.ResumeAgentRunAsync(
+                            id,
+                            req.ActionExecutionId,
+                            ct));
+                }
+                catch (DomainInvariantViolationException ex)
+                {
+                    return AgentRunInvariantProblem(ex);
+                }
+                catch (Exception ex) when (ex is not OperationCanceledException)
+                {
+                    logger.LogError(
+                        ex,
+                        "Agent run resume failed for ticket {TicketId}, action {ActionExecutionId}.",
+                        id,
+                        req.ActionExecutionId);
+                    return Results.Problem(
+                        title: "Agent run resume failed",
+                        detail: "The agent run could not be resumed.",
+                        statusCode: StatusCodes.Status500InternalServerError);
+                }
+            })
+            .RequireAuthorization(AuthPolicies.CanApprove)
+            .WithTags("Agent Runs")
+            .Produces<AgentRunResult>()
+            .ProducesValidationProblem()
+            .ProducesProblem(StatusCodes.Status404NotFound)
+            .ProducesProblem(StatusCodes.Status409Conflict)
+            .ProducesProblem(StatusCodes.Status500InternalServerError);
+
         // -----------------------------------------------------------------
         // Human approval endpoints
         // -----------------------------------------------------------------
@@ -186,10 +277,10 @@ public static class TicketsEndpoints
         approvals.MapGet(
             "/",
             async (
-                ApprovalService svc,
+                AIOps.Orchestration.Orchestrator orchestrator,
                 CancellationToken ct) =>
                 Results.Ok(
-                    await svc.ListPendingAsync(ct)))
+                    await orchestrator.ListPendingApprovalsAsync(ct)))
             .RequireAuthorization(AuthPolicies.CanApprove)
             .Produces<IReadOnlyList<ApprovalResponse>>();
 
@@ -221,7 +312,7 @@ public static class TicketsEndpoints
             async (
                 Guid approvalId,
                 DecideApprovalRequest req,
-                ApprovalService svc,
+                AIOps.Orchestration.Orchestrator orchestrator,
                 ClaimsPrincipal user,
                 CancellationToken ct) =>
             {
@@ -229,7 +320,7 @@ public static class TicketsEndpoints
 
                 try
                 {
-                    var result = await svc.DecideAsync(
+                    var result = await orchestrator.DecideApprovalAsync(
                         approvalId,
                         req.Approve,
                         actor,
@@ -287,6 +378,51 @@ public static class TicketsEndpoints
 
         return errors;
     }
+
+    private static Dictionary<string, string[]> ValidateAgentRun(
+        Guid routeTicketId,
+        AgentRunRequest? request)
+    {
+        var errors = new Dictionary<string, string[]>();
+        if (request is null)
+        {
+            errors["request"] = ["An agent run request is required."];
+            return errors;
+        }
+
+        if (request.CorrelationId == Guid.Empty)
+            errors["correlationId"] = ["A valid correlation ID is required."];
+
+        var ticket = request.Ticket;
+        if (ticket is null)
+        {
+            errors["ticket"] = ["Ticket context is required."];
+            return errors;
+        }
+
+        if (ticket.TicketId != routeTicketId)
+            errors["ticket.ticketId"] = ["Ticket context must match the ticket route."];
+        if (string.IsNullOrWhiteSpace(ticket.Title) || ticket.Title.Length > 200)
+            errors["ticket.title"] = ["A ticket title is required (max 200 characters)."];
+        if (string.IsNullOrWhiteSpace(ticket.Description))
+            errors["ticket.description"] = ["A ticket description is required."];
+        if (string.IsNullOrWhiteSpace(ticket.ReporterEmail) || !ticket.ReporterEmail.Contains('@'))
+            errors["ticket.reporterEmail"] = ["A valid reporter email is required."];
+
+        return errors;
+    }
+
+    private static IResult AgentRunInvariantProblem(
+        DomainInvariantViolationException exception) =>
+        exception.Message.Contains("does not exist", StringComparison.OrdinalIgnoreCase)
+            ? Results.Problem(
+                title: "Ticket or action not found",
+                detail: "The requested ticket or action execution does not exist.",
+                statusCode: StatusCodes.Status404NotFound)
+            : Results.Problem(
+                title: "Agent run rejected",
+                detail: "The agent run cannot proceed in its current lifecycle state.",
+                statusCode: StatusCodes.Status409Conflict);
 
     private static IResult TicketNotFound(Guid id) =>
         Results.Problem(

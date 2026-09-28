@@ -4,6 +4,7 @@
     <ProjectReference Include="..\AIOps.Abstractions\AIOps.Abstractions.csproj" />
     <ProjectReference Include="..\AIOps.Domain\AIOps.Domain.csproj" />
     <ProjectReference Include="..\AIOps.Contracts\AIOps.Contracts.csproj" />
+    <ProjectReference Include="..\AIOps.Tools\AIOps.Tools.csproj" />
   </ItemGroup>
 
   <ItemGroup>

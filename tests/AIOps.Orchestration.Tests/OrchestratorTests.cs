@@ -3,6 +3,7 @@ using AIOps.Abstractions.Agents;
 using AIOps.Abstractions.Audit;
 using AIOps.Abstractions.Configuration;
 using AIOps.Abstractions.Grains;
+using AIOps.Abstractions;
 using AIOps.Abstractions.Persistence;
 using AIOps.Abstractions.Time;
 using AIOps.Abstractions.Tools;
@@ -10,6 +11,8 @@ using AIOps.Contracts.AgentGateway;
 using AIOps.Domain;
 using AIOps.Domain.Entities;
 using AIOps.Orchestration;
+using AIOps.Orchestration.Approvals;
+using AIOps.Tools;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Options;
 using Moq;
@@ -39,6 +42,21 @@ public sealed class OrchestratorTests
         ActionExecution? persisted = null;
         actionStore.Setup(x => x.AddAsync(It.IsAny<ActionExecution>(), It.IsAny<CancellationToken>()))
             .Callback<ActionExecution, CancellationToken>((action, _) => persisted = action)
+            .Returns(Task.CompletedTask);
+        actionStore.Setup(x => x.GetAsync(It.IsAny<Guid>(), It.IsAny<CancellationToken>()))
+            .Returns(() => Task.FromResult(persisted));
+        actionStore.Setup(x => x.UpdateAsync(It.IsAny<ActionExecution>(), It.IsAny<CancellationToken>()))
+            .Callback<ActionExecution, CancellationToken>((action, _) => persisted = action)
+            .Returns(Task.CompletedTask);
+        var approvalStore = new Mock<IApprovalStore>();
+        ApprovalRequest? persistedApproval = null;
+        approvalStore.Setup(x => x.GetForActionExecutionAsync(It.IsAny<Guid>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync((ApprovalRequest?)null);
+        approvalStore.Setup(x => x.AddAsync(It.IsAny<ApprovalRequest>(), It.IsAny<CancellationToken>()))
+            .Callback<ApprovalRequest, CancellationToken>((approval, _) => persistedApproval = approval)
+            .Returns(Task.CompletedTask);
+        approvalStore.Setup(x => x.UpdateAsync(It.IsAny<ApprovalRequest>(), It.IsAny<CancellationToken>()))
+            .Callback<ApprovalRequest, CancellationToken>((approval, _) => persistedApproval = approval)
             .Returns(Task.CompletedTask);
         var audit = new Mock<IAuditStore>();
         audit.Setup(x => x.AppendAsync(It.IsAny<AuditRecordInput>(), It.IsAny<CancellationToken>()))
@@ -77,12 +95,28 @@ public sealed class OrchestratorTests
             actionStore.Object,
             audit.Object,
             clock.Object);
+        var approvalService = new ApprovalService(
+            actionStore.Object,
+            approvalStore.Object,
+            audit.Object,
+            clock.Object,
+            Options.Create(new ApprovalOptions()));
+        var approvalValidator = new Mock<IApprovalValidator>();
+        var executor = new ToolExecutor(
+            registry.Object,
+            approvalValidator.Object,
+            clock.Object);
         var orchestrator = new Orchestrator(
             cluster.Object,
             audit.Object,
             gateway.Object,
             registry.Object,
             validation,
+            actionStore.Object,
+            approvalStore.Object,
+            approvalService,
+            executor,
+            clock.Object,
             Options.Create(new AgentPolicyOptions
             {
                 TriageConfidenceThreshold = 0.7,
@@ -114,11 +148,13 @@ public sealed class OrchestratorTests
         Assert.Equal(schema, manifest.InputSchemaJson);
         Assert.Equal(0.7, sentRequest.TriageConfidenceThreshold);
         Assert.Equal(2, sentRequest.MaxAttempts);
-        Assert.Equal(AgentRunOutcome.ProposalCreated, result.Outcome);
+        Assert.Equal(AgentRunOutcome.AwaitingApproval, result.Outcome);
         Assert.Equal(RiskLevel.Sensitive, result.Proposal!.Risk);
         Assert.True(result.Proposal.RequiresApproval);
         Assert.NotNull(persisted);
-        Assert.Equal(ActionStatus.Proposed, persisted!.Status);
+        Assert.Equal(ActionStatus.AwaitingApproval, persisted!.Status);
+        Assert.NotNull(persistedApproval);
+        Assert.Equal(ApprovalStatus.Pending, persistedApproval!.Status);
     }
 
     [Fact]
@@ -275,6 +311,9 @@ public sealed class OrchestratorTests
     public async Task ResumeAgentRun_delegates_to_gateway_and_audits_result()
     {
         var ticketId = Guid.NewGuid();
+        var action = ActionExecution.Propose(ticketId, "Test.Tool", "{}", RiskLevel.Safe, "agent", null, DateTimeOffset.UtcNow);
+        action.BeginExecution();
+        action.MarkSucceeded("Persisted actual result", DateTimeOffset.UtcNow);
         var correlationId = Guid.NewGuid();
 
         var grain = new Mock<ITicketGrain>();
@@ -315,17 +354,25 @@ public sealed class OrchestratorTests
         var audit = new Mock<IAuditStore>();
 
         var request = new ResumeAgentRunRequest(
-            correlationId,
+            Guid.NewGuid(),
             ticketId,
-            true,
-            "operator-1",
-            """{"success":true}""",
-            true);
+            false,
+            "forged-actor",
+            "forged-result",
+            false,
+            action.Id);
+
+        var actionStore = new Mock<AIOps.Abstractions.Persistence.IActionExecutionStore>();
+        actionStore.Setup(x => x.GetAsync(action.Id, It.IsAny<CancellationToken>())).ReturnsAsync(action);
+        var approvalStore = new Mock<AIOps.Abstractions.Persistence.IApprovalStore>();
+        approvalStore.Setup(x => x.GetForActionExecutionAsync(action.Id, It.IsAny<CancellationToken>())).ReturnsAsync((ApprovalRequest?)null);
 
         var orchestrator = CreateOrchestrator(
             cluster.Object,
             audit.Object,
-            gateway.Object);
+            gateway.Object,
+            actionStore.Object,
+            approvalStore.Object);
 
         var result = await orchestrator.ResumeAgentRunAsync(
             request);
@@ -334,19 +381,20 @@ public sealed class OrchestratorTests
             AgentRunOutcome.Resolved,
             result.Outcome);
 
-        gateway.Verify(
-            x => x.ResumeRunAsync(
-                request,
-                It.IsAny<CancellationToken>()),
-            Times.Once);
+        gateway.Verify(x => x.ResumeRunAsync(
+            It.Is<ResumeAgentRunRequest>(r =>
+                r.ActionExecutionId == action.Id && r.TicketId == ticketId &&
+                r.ToolExecutionSucceeded && !r.ApprovalGranted &&
+                r.ToolResultJson!.Contains("Persisted actual result") && r.ToolResultJson != "forged-result"),
+            It.IsAny<CancellationToken>()), Times.Once);
 
         audit.Verify(
             x => x.AppendAsync(
                 It.Is<AuditRecordInput>(r =>
-                    r.CorrelationId == correlationId &&
+                    r.CorrelationId == action.Id &&
                     r.EventType == "AgentRunResumed" &&
-                    r.EntityType == "ticket" &&
-                    r.EntityId == ticketId.ToString("N")),
+                    r.EntityType == "action_execution" &&
+                    r.EntityId == action.Id.ToString("N")),
                 It.IsAny<CancellationToken>()),
             Times.Once);
     }
@@ -354,20 +402,34 @@ public sealed class OrchestratorTests
     private static Orchestrator CreateOrchestrator(
         IClusterClient cluster,
         IAuditStore audit,
-        IAgentGateway gateway)
+        IAgentGateway gateway,
+        AIOps.Abstractions.Persistence.IActionExecutionStore? actionStoreOverride = null,
+        AIOps.Abstractions.Persistence.IApprovalStore? approvalStoreOverride = null)
     {
         var toolRegistry = new Mock<AIOps.Abstractions.Tools.IToolRegistry>();
         toolRegistry.Setup(x => x.Describe())
             .Returns(Array.Empty<AIOps.Abstractions.Tools.ToolDescriptor>());
 
-        var actionStore = new Mock<AIOps.Abstractions.Persistence.IActionExecutionStore>();
+        var actionStore = actionStoreOverride ?? new Mock<AIOps.Abstractions.Persistence.IActionExecutionStore>().Object;
+        var approvalStore = approvalStoreOverride ?? new Mock<AIOps.Abstractions.Persistence.IApprovalStore>().Object;
         var clock = new Mock<AIOps.Abstractions.Time.IClock>();
         clock.SetupGet(x => x.UtcNow).Returns(DateTimeOffset.UtcNow);
 
         var validation = new AIOps.Orchestration.Agents.ToolProposalValidationService(
             toolRegistry.Object,
-            actionStore.Object,
+            actionStore,
             audit,
+            clock.Object);
+        var approvalService = new ApprovalService(
+            actionStore,
+            approvalStore,
+            audit,
+            clock.Object,
+            Options.Create(new ApprovalOptions()));
+        var approvalValidator = new Mock<IApprovalValidator>();
+        var executor = new ToolExecutor(
+            toolRegistry.Object,
+            approvalValidator.Object,
             clock.Object);
 
         return new Orchestrator(
@@ -376,6 +438,11 @@ public sealed class OrchestratorTests
             gateway,
             toolRegistry.Object,
             validation,
+            actionStore,
+            approvalStore,
+            approvalService,
+            executor,
+            clock.Object,
             Options.Create(new AgentPolicyOptions()),
             NullLogger<Orchestrator>.Instance);
     }

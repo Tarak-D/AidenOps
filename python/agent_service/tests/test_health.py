@@ -236,8 +236,11 @@ def test_agent_run_resume_success():
             ),
             "approval_granted": True,
             "approval_decided_by": "test-user",
-            "tool_result_json": "{\"success\":true}",
+            "tool_result_json": "{\"resultSummary\":\"tool completed\"}",
             "tool_execution_succeeded": True,
+            "action_execution_id": "00000000-0000-0000-0000-000000000009",
+            "approval_status": "Approved",
+            "action_status": "Succeeded",
         },
     )
 
@@ -247,7 +250,8 @@ def test_agent_run_resume_success():
 
     assert body["outcome"] == "Resolved"
     assert body["trace"][0]["agent"] == "ValidationAgent"
-    assert body["trace"][0]["step"] == "verify"
+    assert body["trace"][0]["step"] == "resume"
+    assert "tool completed" in body["trace"][0]["summary"]
 
 
 def test_agent_run_resume_failure():
@@ -262,8 +266,12 @@ def test_agent_run_resume_failure():
             ),
             "approval_granted": False,
             "approval_decided_by": "test-user",
-            "tool_result_json": "{\"success\":false}",
+            "tool_result_json": "Approval rejected.",
             "tool_execution_succeeded": False,
+            "action_execution_id": "00000000-0000-0000-0000-000000000010",
+            "approval_status": "Rejected",
+            "action_status": "Rejected",
+            "tool_execution_error": "Approval rejected.",
         },
     )
 
@@ -273,4 +281,27 @@ def test_agent_run_resume_failure():
 
     assert body["outcome"] == "Escalated"
     assert body["trace"][0]["agent"] == "ValidationAgent"
-    assert body["trace"][0]["step"] == "verify"
+    assert body["trace"][0]["step"] == "resume"
+    assert body["error"] == "Approval rejected."
+
+
+def test_agent_run_resume_uses_action_status_instead_of_legacy_caller_flags():
+    response = client.post(
+        "/api/v1/agent/runs/resume",
+        json={
+            "correlation_id": "00000000-0000-0000-0000-000000000011",
+            "ticket_id": "00000000-0000-0000-0000-000000000012",
+            "approval_granted": True,
+            "tool_execution_succeeded": True,
+            "action_execution_id": "00000000-0000-0000-0000-000000000013",
+            "approval_status": "Expired",
+            "action_status": "Rejected",
+            "tool_result_json": "Approval expired.",
+            "tool_execution_error": "Approval expired.",
+        },
+    )
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["outcome"] == "Escalated"
+    assert body["error"] == "Approval expired."

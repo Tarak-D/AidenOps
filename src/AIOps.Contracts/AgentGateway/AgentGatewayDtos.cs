@@ -76,4 +76,8 @@ public sealed record ResumeAgentRunRequest(
     bool ApprovalGranted,
     string? ApprovalDecidedBy,
     string? ToolResultJson,
-    bool ToolExecutionSucceeded);
+    bool ToolExecutionSucceeded,
+    Guid ActionExecutionId = default,
+    string? ApprovalStatus = null,
+    string? ActionStatus = null,
+    string? ToolExecutionError = null);
