@@ -71,6 +71,8 @@ public sealed class AIOpsDbContext : DbContext
         {
             entity.ToTable("action_executions");
             entity.HasKey(e => e.Id);
+            entity.Property(e => e.Id)
+                .HasColumnName("id");
 
             entity.Property(e => e.TicketId)
                 .HasColumnName("ticket_id");
@@ -123,6 +125,8 @@ public sealed class AIOpsDbContext : DbContext
         {
             entity.ToTable("approval_requests");
             entity.HasKey(e => e.Id);
+            entity.Property(e => e.Id)
+                .HasColumnName("id");
 
             entity.Property(e => e.ActionExecutionId)
                 .HasColumnName("action_execution_id")

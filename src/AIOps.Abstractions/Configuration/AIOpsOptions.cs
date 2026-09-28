@@ -54,3 +54,19 @@ public sealed class AgentPolicyOptions
 
     public int MaxAttempts { get; set; } = 2;
 }
+
+/// <summary>Cloud provider selection and request timeout configuration.</summary>
+public sealed class CloudIntegrationOptions
+{
+    public const string SectionName = "Integrations:Cloud";
+
+    public string Provider { get; set; } = "Simulated";
+
+    public int TimeoutSeconds { get; set; } = 30;
+
+    /// <summary>
+    /// Optional AWS region. When empty, the AWS SDK uses its standard region
+    /// configuration chain.
+    /// </summary>
+    public string? Region { get; set; }
+}

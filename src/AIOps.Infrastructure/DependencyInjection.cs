@@ -15,6 +15,8 @@ using AIOps.Infrastructure.Integrations;
 using AIOps.Infrastructure.Knowledge;
 using AIOps.Infrastructure.Persistence;
 using AIOps.Infrastructure.Time;
+using Amazon;
+using Amazon.EC2;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
@@ -42,8 +44,62 @@ public static class DependencyInjection
         services.Configure<AgentPolicyOptions>(
             config.GetSection(AgentPolicyOptions.SectionName));
 
+        var cloudOptions = new CloudIntegrationOptions();
+        config.GetSection(CloudIntegrationOptions.SectionName).Bind(cloudOptions);
+
+        if (cloudOptions.TimeoutSeconds <= 0)
+        {
+            throw new InvalidOperationException(
+                "Integrations:Cloud:TimeoutSeconds must be greater than zero.");
+        }
+
+        services.Configure<CloudIntegrationOptions>(
+            config.GetSection(CloudIntegrationOptions.SectionName));
+
         services.AddSingleton<IClock, SystemClock>();
-        services.AddSingleton<ICloudProvider, SimulatedCloudProvider>();
+        var providerKey = $"{CloudIntegrationOptions.SectionName}:Provider";
+        var providerWasConfigured =
+            config is IConfigurationRoot configurationRoot &&
+            configurationRoot.Providers.Any(provider =>
+                provider.TryGet(providerKey, out _));
+        var cloudProvider = providerWasConfigured
+            ? config[providerKey]
+            : cloudOptions.Provider;
+
+        if (cloudProvider is null)
+        {
+            throw new InvalidOperationException(
+                "Integrations:Cloud:Provider must be 'Simulated' or 'AwsEc2'.");
+        }
+
+        switch (cloudProvider.Trim().ToUpperInvariant())
+        {
+            case "SIMULATED":
+                services.AddSingleton<ICloudProvider, SimulatedCloudProvider>();
+                break;
+            case "AWSEC2":
+                services.AddSingleton<IAmazonEC2>(_ =>
+                {
+                    var awsConfig = new AmazonEC2Config
+                    {
+                        Timeout = TimeSpan.FromSeconds(
+                            cloudOptions.TimeoutSeconds)
+                    };
+
+                    if (!string.IsNullOrWhiteSpace(cloudOptions.Region))
+                    {
+                        awsConfig.RegionEndpoint =
+                            RegionEndpoint.GetBySystemName(cloudOptions.Region);
+                    }
+
+                    return new AmazonEC2Client(awsConfig);
+                });
+                services.AddSingleton<ICloudProvider, AwsEc2CloudProvider>();
+                break;
+            default:
+                throw new InvalidOperationException(
+                    "Integrations:Cloud:Provider must be 'Simulated' or 'AwsEc2'.");
+        }
         services.AddSingleton<IDirectoryService, SimulatedDirectoryService>();
         services.AddSingleton<IItsmConnector, SimulatedItsmConnector>();
         services.AddSingleton<INetworkDiagnostics, SimulatedNetworkDiagnostics>();

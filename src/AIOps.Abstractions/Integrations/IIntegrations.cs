@@ -1,8 +1,6 @@
 namespace AIOps.Abstractions.Integrations;
 
-// Integration seams. Phase 1-15: ONLY mock/simulated implementations exist.
-// These interfaces exist so ServiceNow/Entra ID/AWS adapters can be added later
-// behind configuration — never during this portfolio build-out.
+// Integration seams keep providers behind configuration and out of orchestration.
 
 /// <summary>Directory/identity operations. SIMULATION ONLY.</summary>
 public interface IDirectoryService
@@ -11,7 +9,7 @@ public interface IDirectoryService
     Task<string> GrantGroupAccessAsync(string userPrincipalName, string groupId, CancellationToken ct = default);
 }
 
-/// <summary>Cloud compute operations. SIMULATION ONLY.</summary>
+/// <summary>Cloud compute operations.</summary>
 public interface ICloudProvider
 {
     Task<string> RestartInstanceAsync(string instanceId, CancellationToken ct = default);

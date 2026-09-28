@@ -15,7 +15,7 @@ CREATE TABLE IF NOT EXISTS action_executions
 
     CONSTRAINT action_executions_pkey PRIMARY KEY (id),
     CONSTRAINT ck_action_executions_risk CHECK (risk BETWEEN 0 AND 2),
-    CONSTRAINT ck_action_executions_status CHECK (status BETWEEN 0 AND 6)
+    CONSTRAINT ck_action_executions_status CHECK (status BETWEEN 0 AND 7)
 );
 
 CREATE INDEX IF NOT EXISTS ix_action_executions_ticket_id
