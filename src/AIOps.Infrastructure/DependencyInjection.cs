@@ -15,6 +15,8 @@ using AIOps.Infrastructure.Integrations;
 using AIOps.Infrastructure.Knowledge;
 using AIOps.Infrastructure.Persistence;
 using AIOps.Infrastructure.Time;
+using Azure.Core;
+using Azure.Identity;
 using Amazon;
 using Amazon.EC2;
 using Microsoft.EntityFrameworkCore;
@@ -55,6 +57,19 @@ public static class DependencyInjection
 
         services.Configure<CloudIntegrationOptions>(
             config.GetSection(CloudIntegrationOptions.SectionName));
+
+        var directoryOptions = new DirectoryIntegrationOptions();
+        config.GetSection(DirectoryIntegrationOptions.SectionName)
+            .Bind(directoryOptions);
+
+        if (directoryOptions.TimeoutSeconds <= 0)
+        {
+            throw new InvalidOperationException(
+                "Integrations:Directory:TimeoutSeconds must be greater than zero.");
+        }
+
+        services.Configure<DirectoryIntegrationOptions>(
+            config.GetSection(DirectoryIntegrationOptions.SectionName));
 
         services.AddSingleton<IClock, SystemClock>();
         var providerKey = $"{CloudIntegrationOptions.SectionName}:Provider";
@@ -106,7 +121,68 @@ public static class DependencyInjection
         services.AddSingleton<
             ICloudProviderStatusService,
             CloudProviderStatusService>();
-        services.AddSingleton<IDirectoryService, SimulatedDirectoryService>();
+        var directoryProviderKey =
+            $"{DirectoryIntegrationOptions.SectionName}:Provider";
+        var directoryProviderWasConfigured =
+            config is IConfigurationRoot directoryConfigurationRoot &&
+            directoryConfigurationRoot.Providers.Any(provider =>
+                provider.TryGet(directoryProviderKey, out _));
+        var directoryProvider = directoryProviderWasConfigured
+            ? config[directoryProviderKey]
+            : directoryOptions.Provider;
+
+        if (directoryProvider is null)
+        {
+            throw new InvalidOperationException(
+                "Integrations:Directory:Provider must be 'Simulated' or 'MicrosoftGraph'.");
+        }
+
+        switch (directoryProvider.Trim().ToUpperInvariant())
+        {
+            case "SIMULATED":
+                services.AddSingleton<IDirectoryService, SimulatedDirectoryService>();
+                break;
+            case "MICROSOFTGRAPH":
+                services.AddHttpClient(
+                    "MicrosoftGraphDirectory",
+                    client => client.Timeout = TimeSpan.FromSeconds(
+                        directoryOptions.TimeoutSeconds));
+                services.AddSingleton<TokenCredential>(_ =>
+                {
+                    var credentialOptions = new DefaultAzureCredentialOptions
+                    {
+                        TenantId = directoryOptions.TenantId,
+                        ManagedIdentityClientId = directoryOptions.ClientId,
+                        WorkloadIdentityClientId = directoryOptions.ClientId,
+                        ExcludeAzureCliCredential = true,
+                        ExcludeAzurePowerShellCredential = true,
+                        ExcludeVisualStudioCredential = true,
+                        ExcludeVisualStudioCodeCredential = true,
+                        ExcludeInteractiveBrowserCredential = true,
+                        ExcludeAzureDeveloperCliCredential = true,
+                        ExcludeBrokerCredential = true
+                    };
+                    return new DefaultAzureCredential(credentialOptions);
+                });
+                services.AddSingleton(serviceProvider =>
+                {
+                    var httpClient = serviceProvider
+                        .GetRequiredService<IHttpClientFactory>()
+                        .CreateClient("MicrosoftGraphDirectory");
+                    return new Microsoft.Graph.GraphServiceClient(
+                        httpClient,
+                        serviceProvider.GetRequiredService<TokenCredential>(),
+                        ["https://graph.microsoft.com/.default"]);
+                });
+                services.AddSingleton<
+                    IDirectoryService,
+                    MicrosoftGraphDirectoryService>();
+                break;
+            default:
+                throw new InvalidOperationException(
+                    "Integrations:Directory:Provider must be 'Simulated' or 'MicrosoftGraph'.");
+        }
+
         services.AddSingleton<IItsmConnector, SimulatedItsmConnector>();
         services.AddSingleton<INetworkDiagnostics, SimulatedNetworkDiagnostics>();
 

@@ -70,3 +70,19 @@ public sealed class CloudIntegrationOptions
     /// </summary>
     public string? Region { get; set; }
 }
+
+/// <summary>Directory provider selection and request timeout configuration.</summary>
+public sealed class DirectoryIntegrationOptions
+{
+    public const string SectionName = "Integrations:Directory";
+
+    public string Provider { get; set; } = "Simulated";
+
+    public int TimeoutSeconds { get; set; } = 30;
+
+    /// <summary>Optional non-secret Entra tenant identifier.</summary>
+    public string? TenantId { get; set; }
+
+    /// <summary>Optional managed identity client identifier.</summary>
+    public string? ClientId { get; set; }
+}
