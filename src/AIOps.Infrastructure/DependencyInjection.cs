@@ -80,6 +80,22 @@ public static class DependencyInjection
                 "Integrations:Itsm:TimeoutSeconds must be greater than zero.");
         }
 
+        var jiraTimeoutSeconds = itsmOptions.JiraServiceManagement.TimeoutSeconds
+            ?? itsmOptions.TimeoutSeconds;
+        if (jiraTimeoutSeconds <= 0)
+        {
+            throw new InvalidOperationException(
+                "Integrations:Itsm:JiraServiceManagement:TimeoutSeconds must be greater than zero.");
+        }
+
+        var zendeskTimeoutSeconds = itsmOptions.Zendesk.TimeoutSeconds
+            ?? itsmOptions.TimeoutSeconds;
+        if (zendeskTimeoutSeconds <= 0)
+        {
+            throw new InvalidOperationException(
+                "Integrations:Itsm:Zendesk:TimeoutSeconds must be greater than zero.");
+        }
+
         var itsmProviderKey = $"{ItsmIntegrationOptions.SectionName}:Provider";
         var itsmProviderWasConfigured =
             config is IConfigurationRoot itsmConfigurationRoot &&
@@ -94,6 +110,7 @@ public static class DependencyInjection
             config.GetSection(ItsmIntegrationOptions.SectionName));
 
         services.AddSingleton<IClock, SystemClock>();
+        services.AddSingleton<TimeProvider>(TimeProvider.System);
         var providerKey = $"{CloudIntegrationOptions.SectionName}:Provider";
         var providerWasConfigured =
             config is IConfigurationRoot configurationRoot &&
@@ -206,9 +223,52 @@ public static class DependencyInjection
         }
 
         services.AddSingleton<IItsmProviderConnector, SimulatedItsmConnector>();
-        services.AddSingleton<IItsmProviderConnector, ServiceNowItsmConnector>();
-        services.AddSingleton<IItsmProviderConnector, JiraServiceManagementItsmConnector>();
-        services.AddSingleton<IItsmProviderConnector, ZendeskItsmConnector>();
+        services.AddHttpClient("ServiceNowItsm", (serviceProvider, client) =>
+        {
+            var options = serviceProvider
+                .GetRequiredService<Microsoft.Extensions.Options.IOptions<ItsmIntegrationOptions>>()
+                .Value;
+            client.Timeout = TimeSpan.FromSeconds(options.TimeoutSeconds);
+        });
+        services.AddSingleton<ServiceNowItsmConnector>(serviceProvider =>
+            new ServiceNowItsmConnector(
+                serviceProvider.GetRequiredService<IHttpClientFactory>()
+                    .CreateClient("ServiceNowItsm"),
+                serviceProvider.GetRequiredService<Microsoft.Extensions.Options.IOptions<ItsmIntegrationOptions>>(),
+                serviceProvider.GetRequiredService<TimeProvider>()));
+        services.AddSingleton<IItsmProviderConnector>(serviceProvider =>
+            serviceProvider.GetRequiredService<ServiceNowItsmConnector>());
+        services.AddHttpClient("JiraServiceManagementItsm", (serviceProvider, client) =>
+        {
+            var options = serviceProvider
+                .GetRequiredService<Microsoft.Extensions.Options.IOptions<ItsmIntegrationOptions>>()
+                .Value;
+            var timeoutSeconds = options.JiraServiceManagement.TimeoutSeconds
+                ?? options.TimeoutSeconds;
+            client.Timeout = TimeSpan.FromSeconds(timeoutSeconds);
+        });
+        services.AddSingleton<JiraServiceManagementItsmConnector>(serviceProvider =>
+            new JiraServiceManagementItsmConnector(
+                serviceProvider.GetRequiredService<IHttpClientFactory>()
+                    .CreateClient("JiraServiceManagementItsm"),
+                serviceProvider.GetRequiredService<Microsoft.Extensions.Options.IOptions<ItsmIntegrationOptions>>()));
+        services.AddSingleton<IItsmProviderConnector>(serviceProvider =>
+            serviceProvider.GetRequiredService<JiraServiceManagementItsmConnector>());
+        services.AddHttpClient("ZendeskItsm", (serviceProvider, client) =>
+        {
+            var options = serviceProvider
+                .GetRequiredService<Microsoft.Extensions.Options.IOptions<ItsmIntegrationOptions>>()
+                .Value;
+            client.Timeout = TimeSpan.FromSeconds(
+                options.Zendesk.TimeoutSeconds ?? options.TimeoutSeconds);
+        });
+        services.AddSingleton<ZendeskItsmConnector>(serviceProvider =>
+            new ZendeskItsmConnector(
+                serviceProvider.GetRequiredService<IHttpClientFactory>()
+                    .CreateClient("ZendeskItsm"),
+                serviceProvider.GetRequiredService<Microsoft.Extensions.Options.IOptions<ItsmIntegrationOptions>>()));
+        services.AddSingleton<IItsmProviderConnector>(serviceProvider =>
+            serviceProvider.GetRequiredService<ZendeskItsmConnector>());
         services.AddSingleton<ItsmProviderSelectionService>();
         services.AddSingleton<IItsmProviderStatusService>(serviceProvider =>
             serviceProvider.GetRequiredService<ItsmProviderSelectionService>());

@@ -42,6 +42,36 @@ public sealed class ItsmProviderSelectionTests
             provider.GetRequiredService<IOptions<ItsmIntegrationOptions>>().Value.Provider);
     }
 
+    [Fact]
+    public async Task InfrastructureRegistrationResolvesRealJiraConnectorWithoutNetworkWhenUnconfigured()
+    {
+        var services = new ServiceCollection();
+        services.AddAIOpsInfrastructure(
+            new ConfigurationBuilder().AddInMemoryCollection().Build());
+        using var provider = services.BuildServiceProvider();
+
+        var connector = provider.GetRequiredService<JiraServiceManagementItsmConnector>();
+
+        Assert.Equal("JiraServiceManagement", connector.ProviderName);
+        Assert.Equal("Real", connector.Mode);
+        Assert.Equal("NotConfigured", await connector.GetConnectionStatusAsync());
+    }
+
+    [Fact]
+    public async Task InfrastructureRegistrationResolvesRealZendeskConnectorWithoutNetworkWhenUnconfigured()
+    {
+        var services = new ServiceCollection();
+        services.AddAIOpsInfrastructure(
+            new ConfigurationBuilder().AddInMemoryCollection().Build());
+        using var provider = services.BuildServiceProvider();
+
+        var connector = provider.GetRequiredService<ZendeskItsmConnector>();
+
+        Assert.Equal("Zendesk", connector.ProviderName);
+        Assert.Equal("Real", connector.Mode);
+        Assert.Equal("NotConfigured", await connector.GetConnectionStatusAsync());
+    }
+
     [Theory]
     [InlineData(null)]
     [InlineData("")]
@@ -105,18 +135,36 @@ public sealed class ItsmProviderSelectionTests
             Options.Create(new ItsmIntegrationOptions()));
         var router = new ConfiguredItsmConnector(selection, CreateProviders());
 
-        var exception = await Assert.ThrowsAsync<ItsmProviderNotConfiguredException>(
+        var exception = await Record.ExceptionAsync(
             () => router.UpdateTicketAsync("INC-1", "note"));
 
-        Assert.Contains("ItsmProviderNotConfigured", exception.Message);
-        Assert.Contains(selected, exception.Message);
+        Assert.IsAssignableFrom<InvalidOperationException>(exception);
+        var expectedCategory = selected switch
+        {
+            "ServiceNow" => "ServiceNowNotConfigured",
+            "JiraServiceManagement" => "JiraNotConfigured",
+            "Zendesk" => "ZendeskNotConfigured",
+            _ => "ItsmProviderNotConfigured"
+        };
+        Assert.Contains(expectedCategory, exception.Message);
+        if (selected != "JiraServiceManagement")
+        {
+            Assert.Contains(selected, exception.Message);
+        }
     }
 
     private static IItsmProviderConnector[] CreateProviders() =>
     [
         new SimulatedItsmConnector(),
-        new ServiceNowItsmConnector(),
-        new JiraServiceManagementItsmConnector(),
-        new ZendeskItsmConnector()
+        new ServiceNowItsmConnector(
+            new HttpClient(),
+            Options.Create(new ItsmIntegrationOptions()),
+            TimeProvider.System),
+        new JiraServiceManagementItsmConnector(
+            new HttpClient(),
+            Options.Create(new ItsmIntegrationOptions())),
+        new ZendeskItsmConnector(
+            new HttpClient(),
+            Options.Create(new ItsmIntegrationOptions()))
     ];
 }

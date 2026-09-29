@@ -87,7 +87,7 @@ public sealed class DirectoryIntegrationOptions
     public string? ClientId { get; set; }
 }
 
-/// <summary>ITSM provider selection. Provider credentials are intentionally not modeled here.</summary>
+/// <summary>ITSM provider selection and timeout configuration.</summary>
 public sealed class ItsmIntegrationOptions
 {
     public const string SectionName = "Integrations:Itsm";
@@ -95,4 +95,60 @@ public sealed class ItsmIntegrationOptions
     public string Provider { get; set; } = "Simulated";
 
     public int TimeoutSeconds { get; set; } = 30;
+
+    public ServiceNowItsmOptions ServiceNow { get; set; } = new();
+
+    public JiraServiceManagementItsmOptions JiraServiceManagement { get; set; } = new();
+
+    public ZendeskItsmOptions Zendesk { get; set; } = new();
+}
+
+/// <summary>
+/// Server-side ServiceNow OAuth client configuration. ClientSecret must be supplied
+/// through user-secrets, a secret store, or environment configuration.
+/// </summary>
+public sealed class ServiceNowItsmOptions
+{
+    public string? BaseUrl { get; set; }
+
+    public string? ClientId { get; set; }
+
+    public string? ClientSecret { get; set; }
+}
+
+/// <summary>Server-side Jira Cloud credentials and project/workflow configuration.</summary>
+public sealed class JiraServiceManagementItsmOptions
+{
+    public string? BaseUrl { get; set; }
+
+    public string? Email { get; set; }
+
+    public string? ApiToken { get; set; }
+
+    public string? ProjectKey { get; set; }
+
+    public string? IssueType { get; set; }
+
+    public int? TimeoutSeconds { get; set; }
+
+    /// <summary>Configured target status names for supported normalized states.</summary>
+    public Dictionary<string, string> StateMappings { get; set; } = new(StringComparer.OrdinalIgnoreCase)
+    {
+        ["Open"] = "Open",
+        ["InProgress"] = "In Progress",
+        ["Resolved"] = "Resolved",
+        ["Closed"] = "Closed"
+    };
+}
+
+/// <summary>Server-side Zendesk API token configuration.</summary>
+public sealed class ZendeskItsmOptions
+{
+    public string? BaseUrl { get; set; }
+
+    public string? Email { get; set; }
+
+    public string? ApiToken { get; set; }
+
+    public int? TimeoutSeconds { get; set; }
 }

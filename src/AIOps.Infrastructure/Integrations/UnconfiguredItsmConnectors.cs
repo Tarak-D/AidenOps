@@ -7,22 +7,6 @@ public sealed class ItsmProviderNotConfiguredException(string provider)
     : InvalidOperationException(
         $"ItsmProviderNotConfigured: The {provider} connector is not configured.");
 
-public sealed class ServiceNowItsmConnector : UnconfiguredItsmProviderConnector
-{
-    public ServiceNowItsmConnector() : base("ServiceNow", "ServiceNow") { }
-}
-
-public sealed class JiraServiceManagementItsmConnector : UnconfiguredItsmProviderConnector
-{
-    public JiraServiceManagementItsmConnector()
-        : base("JiraServiceManagement", "Jira Service Management") { }
-}
-
-public sealed class ZendeskItsmConnector : UnconfiguredItsmProviderConnector
-{
-    public ZendeskItsmConnector() : base("Zendesk", "Zendesk") { }
-}
-
 public abstract class UnconfiguredItsmProviderConnector : IItsmProviderConnector
 {
     protected UnconfiguredItsmProviderConnector(string providerName, string displayName)
