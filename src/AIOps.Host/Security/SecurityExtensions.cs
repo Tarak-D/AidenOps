@@ -14,6 +14,7 @@ public static class AuthPolicies
     public const string CanApprove = "CanApprove";
     public const string CanViewAudit = "CanViewAudit";
     public const string CanManageKnowledge = "CanManageKnowledge";
+    public const string CanManageIntegrations = "CanManageIntegrations";
 }
 
 /// <summary>
@@ -24,7 +25,10 @@ public static class AuthPolicies
 /// </summary>
 public static class SecurityExtensions
 {
-    public static IServiceCollection AddAIOpsSecurity(this IServiceCollection services, IConfiguration config)
+    public static IServiceCollection AddAIOpsSecurity(
+        this IServiceCollection services,
+        IConfiguration config,
+        IWebHostEnvironment environment)
     {
         services.AddAuthentication(o =>
             {
@@ -38,7 +42,12 @@ public static class SecurityExtensions
             .AddPolicy(AuthPolicies.CanRetry, p => p.RequireRole(nameof(UserRole.Engineer), nameof(UserRole.Admin)))
             .AddPolicy(AuthPolicies.CanApprove, p => p.RequireRole(nameof(UserRole.Approver), nameof(UserRole.Admin)))
             .AddPolicy(AuthPolicies.CanViewAudit, p => p.RequireRole(nameof(UserRole.Admin)))
-            .AddPolicy(AuthPolicies.CanManageKnowledge, p => p.RequireRole(nameof(UserRole.Engineer), nameof(UserRole.Admin)));
+            .AddPolicy(AuthPolicies.CanManageKnowledge, p => p.RequireRole(nameof(UserRole.Engineer), nameof(UserRole.Admin)))
+            .AddPolicy(AuthPolicies.CanManageIntegrations, p => p.RequireAssertion(context =>
+                context.User.IsInRole(nameof(UserRole.Admin)) ||
+                (environment.IsDevelopment() && context.User.Identities.Any(identity =>
+                    identity.IsAuthenticated &&
+                    identity.AuthenticationType == DevIdentityHandler.SchemeName))));
 
         return services;
     }

@@ -1,6 +1,8 @@
 ﻿@inherits LayoutComponentBase
 
 @inject AIOps.Abstractions.Integrations.ICloudProviderStatusService CloudProviderStatusService
+@inject Microsoft.JSInterop.IJSRuntime JS
+@inject ISnackbar Snackbar
 
 @{
     var cloudProviderStatus = CloudProviderStatusService.GetStatus();
@@ -21,10 +23,22 @@
     <MudAppBar Elevation="1">
         <MudIcon Icon="@Icons.Material.Filled.SmartToy" Class="mr-2" />
         <MudText Typo="Typo.h6">AIOps Agent Platform</MudText>
+        <MudNavLink Href="/" Match="NavLinkMatch.All" Icon="@Icons.Material.Filled.Dashboard" Class="ml-4">
+            Dashboard
+        </MudNavLink>
+        <MudNavLink Href="/integrations" Match="NavLinkMatch.All" Icon="@Icons.Material.Filled.Settings" Class="ml-1">
+            Integrations
+        </MudNavLink>
         <MudSpacer />
         <MudChip T="string" Color="@cloudProviderColor" Variant="Variant.Filled" Size="Size.Small">
             Cloud Provider: @cloudProviderLabel
         </MudChip>
+        @if (_itsmStatus is not null)
+        {
+            <MudChip T="string" Color="@ItsmStatusColor" Variant="Variant.Outlined" Size="Size.Small" Class="ml-2">
+                @ItsmHeaderLabel
+            </MudChip>
+        }
         <MudChip T="string" Color="Color.Info" Variant="Variant.Outlined" Size="Size.Small">Phase 1 — Foundation</MudChip>
     </MudAppBar>
     <MudMainContent Class="pa-6">
@@ -37,3 +51,48 @@
     <a href="." class="reload">Reload</a>
     <span class="dismiss">🗙</span>
 </div>
+
+@code {
+    private AIOps.Abstractions.Integrations.ItsmProviderStatus? _itsmStatus;
+    private Microsoft.JSInterop.IJSObjectReference? _itsmApi;
+    private string ItsmConnectionLabel => _itsmStatus?.ConnectionStatus switch
+    {
+        "NotConfigured" => "Not Configured",
+        "Unavailable" => "Unavailable",
+        "Connected" => "Connected",
+        "Simulated" => "Simulated",
+        _ => "Unavailable"
+    };
+    private Color ItsmStatusColor => ItsmConnectionLabel switch
+    {
+        "Simulated" => Color.Success,
+        "Connected" => Color.Success,
+        "Not Configured" => Color.Warning,
+        _ => Color.Error
+    };
+    private string ItsmHeaderLabel => _itsmStatus?.Mode == "Simulated"
+        ? "ITSM: SIMULATED"
+        : $"ITSM: {_itsmStatus?.DisplayName.ToUpperInvariant()} · {ItsmConnectionLabel.ToUpperInvariant()}";
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (!firstRender)
+        {
+            return;
+        }
+
+        try
+        {
+            _itsmApi = await JS.InvokeAsync<Microsoft.JSInterop.IJSObjectReference>(
+                "import", "./Components/Layout/MainLayout.razor.js");
+            _itsmStatus = await _itsmApi.InvokeAsync<AIOps.Abstractions.Integrations.ItsmProviderStatus>(
+                "getItsmProviderStatus");
+        }
+        catch
+        {
+            Snackbar.Add("ITSM provider status is unavailable.", Severity.Warning);
+        }
+
+        StateHasChanged();
+    }
+}

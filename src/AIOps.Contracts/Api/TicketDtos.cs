@@ -56,6 +56,8 @@ public sealed record DecideApprovalRequest(
     bool Approve,
     string? Comment);
 
+public sealed record SetItsmProviderRequest(string Provider);
+
 /// <summary>Selector for resuming a persisted action; execution and approval state are server-owned.</summary>
 public sealed record ResumeAgentRunApiRequest(
     Guid ActionExecutionId);

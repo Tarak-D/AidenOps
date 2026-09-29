@@ -1,0 +1,193 @@
+@page "/integrations"
+
+@inject Microsoft.JSInterop.IJSRuntime JS
+@inject Microsoft.AspNetCore.Authorization.IAuthorizationService AuthorizationService
+@inject Microsoft.AspNetCore.Components.Authorization.AuthenticationStateProvider AuthenticationStateProvider
+@inject Microsoft.AspNetCore.Hosting.IWebHostEnvironment HostEnvironment
+@inject ISnackbar Snackbar
+
+<PageTitle>Integrations | AIOps Agent Platform</PageTitle>
+
+<div style="padding-top: 48px;">
+<MudText Typo="Typo.h3" GutterBottom="true">Integrations</MudText>
+<MudText Typo="Typo.subtitle1" Class="mb-6">
+    Manage external systems used by AidenOps.
+</MudText>
+
+<MudCard Elevation="2" Style="max-width: 760px">
+    <MudCardHeader>
+        <CardHeaderContent>
+            <MudText Typo="Typo.h5">ITSM Integration</MudText>
+            <MudText Typo="Typo.body2" Color="Color.Secondary">
+                Ticketing and service-management provider
+            </MudText>
+        </CardHeaderContent>
+    </MudCardHeader>
+    <MudCardContent>
+        @if (_status is null)
+        {
+            <MudProgressLinear Indeterminate="true" Color="Color.Primary" Class="mb-4" />
+            <MudText Color="Color.Secondary">Loading provider status…</MudText>
+        }
+        else
+        {
+            <MudGrid>
+                <MudItem xs="12" md="6">
+                    <MudText Typo="Typo.subtitle2" Class="mb-1">Provider</MudText>
+                    <MudSelect T="string" Value="_selectedProvider" ValueChanged="ProviderChangedAsync"
+                               Disabled="@(!_canManage)" Variant="Variant.Outlined" Dense="true">
+                        <MudSelectItem T="string" Value="@("Simulated")">Simulated</MudSelectItem>
+                        <MudSelectItem T="string" Value="@("ServiceNow")">ServiceNow</MudSelectItem>
+                        <MudSelectItem T="string" Value="@("JiraServiceManagement")">Jira Service Management</MudSelectItem>
+                        <MudSelectItem T="string" Value="@("Zendesk")">Zendesk</MudSelectItem>
+                    </MudSelect>
+                </MudItem>
+                <MudItem xs="12" md="6">
+                    <MudText Typo="Typo.subtitle2">Active provider</MudText>
+                    <MudText Typo="Typo.body1">@_status.DisplayName</MudText>
+                </MudItem>
+                <MudItem xs="12" md="6">
+                    <MudText Typo="Typo.subtitle2">Status</MudText>
+                    <MudChip T="string" Color="@StatusColor" Variant="Variant.Outlined">
+                        @ConnectionStatusLabel
+                    </MudChip>
+                </MudItem>
+                <MudItem xs="12" md="6">
+                    <MudText Typo="Typo.subtitle2">Provider mode</MudText>
+                    <MudText Typo="Typo.body1">@(_status.IsProduction ? "Real provider" : "Simulated")</MudText>
+                </MudItem>
+                <MudItem xs="12" md="6">
+                    <MudText Typo="Typo.subtitle2">Environment</MudText>
+                    <MudText Typo="Typo.body1">@HostEnvironment.EnvironmentName</MudText>
+                </MudItem>
+                <MudItem xs="12" md="6">
+                    <MudText Typo="Typo.subtitle2">Authorization</MudText>
+                    <MudText Typo="Typo.body1">@(_canManage ? "Authorized to change providers" : "Read only")</MudText>
+                </MudItem>
+            </MudGrid>
+
+            @if (!_canManage)
+            {
+                <MudAlert Severity="Severity.Warning" Variant="Variant.Outlined" Class="mt-4">
+                    <MudIcon Icon="@Icons.Material.Filled.Lock" Class="mr-2" />
+                    Only administrators can change integration providers.
+                </MudAlert>
+            }
+            else
+            {
+                <MudButton Variant="Variant.Filled" Color="Color.Primary" Class="mt-4"
+                           Disabled="@(_saving || _selectedProvider == _status.ConfiguredProvider)"
+                           OnClick="SaveProviderAsync">
+                    @(_saving ? "Saving…" : "Save Provider")
+                </MudButton>
+            }
+        }
+    </MudCardContent>
+</MudCard>
+</div>
+
+@code {
+    private AIOps.Abstractions.Integrations.ItsmProviderStatus? _status;
+    private Microsoft.JSInterop.IJSObjectReference? _itsmApi;
+    private string? _selectedProvider;
+    private bool _canManage;
+    private bool _saving;
+
+    private Color StatusColor => _status?.ConnectionStatus switch
+    {
+        "Simulated" or "Connected" => Color.Success,
+        "NotConfigured" => Color.Warning,
+        _ => Color.Error
+    };
+    private string ConnectionStatusLabel => _status?.ConnectionStatus switch
+    {
+        "NotConfigured" => "Not Configured",
+        "Unavailable" => "Unavailable",
+        "Connected" => "Connected",
+        "Simulated" => "Simulated",
+        _ => "Unavailable"
+    };
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (!firstRender)
+        {
+            return;
+        }
+
+        try
+        {
+            _itsmApi = await JS.InvokeAsync<Microsoft.JSInterop.IJSObjectReference>(
+                "import", "./Components/Layout/MainLayout.razor.js");
+            await RefreshStatusAsync();
+        }
+        catch
+        {
+            Snackbar.Add("ITSM provider status is unavailable.", Severity.Warning);
+        }
+
+        var user = (await AuthenticationStateProvider.GetAuthenticationStateAsync()).User;
+        var authorization = await AuthorizationService.AuthorizeAsync(
+            user, resource: null, AuthPolicies.CanManageIntegrations);
+        _canManage = authorization.Succeeded &&
+            (HostEnvironment.IsDevelopment() || user.Identity?.AuthenticationType !=
+                SecurityExtensions.DevIdentityHandler.SchemeName);
+        StateHasChanged();
+    }
+
+    private Task ProviderChangedAsync(string provider)
+    {
+        _selectedProvider = provider;
+        return Task.CompletedTask;
+    }
+
+    private async Task SaveProviderAsync()
+    {
+        if (!_canManage || _status is null || _selectedProvider is null || _saving)
+        {
+            return;
+        }
+
+        _saving = true;
+        try
+        {
+            var user = (await AuthenticationStateProvider.GetAuthenticationStateAsync()).User;
+            var authorization = await AuthorizationService.AuthorizeAsync(
+                user, resource: null, AuthPolicies.CanManageIntegrations);
+            if (!authorization.Succeeded ||
+                (!HostEnvironment.IsDevelopment() && user.Identity?.AuthenticationType ==
+                    SecurityExtensions.DevIdentityHandler.SchemeName))
+            {
+                _canManage = false;
+                Snackbar.Add("Administrator authorization is required to change the ITSM provider.", Severity.Error);
+                return;
+            }
+
+            _itsmApi ??= await JS.InvokeAsync<Microsoft.JSInterop.IJSObjectReference>(
+                "import", "./Components/Layout/MainLayout.razor.js");
+            var devIdentity = user.Identity?.AuthenticationType ==
+                SecurityExtensions.DevIdentityHandler.SchemeName
+                ? user.Identity.Name
+                : null;
+            await _itsmApi.InvokeVoidAsync("selectItsmProvider", _selectedProvider, devIdentity);
+            await RefreshStatusAsync();
+            _selectedProvider = _status?.ConfiguredProvider;
+            Snackbar.Add("ITSM provider status refreshed from the server.", Severity.Success);
+        }
+        catch
+        {
+            Snackbar.Add("The ITSM provider selection could not be saved.", Severity.Error);
+        }
+        finally
+        {
+            _saving = false;
+        }
+    }
+
+    private async Task RefreshStatusAsync()
+    {
+        _status = await _itsmApi!.InvokeAsync<AIOps.Abstractions.Integrations.ItsmProviderStatus>(
+            "getItsmProviderStatus");
+        _selectedProvider = _status.ConfiguredProvider;
+    }
+}

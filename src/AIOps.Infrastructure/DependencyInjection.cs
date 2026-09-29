@@ -71,6 +71,28 @@ public static class DependencyInjection
         services.Configure<DirectoryIntegrationOptions>(
             config.GetSection(DirectoryIntegrationOptions.SectionName));
 
+        var itsmOptions = new ItsmIntegrationOptions();
+        config.GetSection(ItsmIntegrationOptions.SectionName).Bind(itsmOptions);
+
+        if (itsmOptions.TimeoutSeconds <= 0)
+        {
+            throw new InvalidOperationException(
+                "Integrations:Itsm:TimeoutSeconds must be greater than zero.");
+        }
+
+        var itsmProviderKey = $"{ItsmIntegrationOptions.SectionName}:Provider";
+        var itsmProviderWasConfigured =
+            config is IConfigurationRoot itsmConfigurationRoot &&
+            itsmConfigurationRoot.Providers.Any(provider =>
+                provider.TryGet(itsmProviderKey, out _));
+        var configuredItsmProvider = itsmProviderWasConfigured
+            ? config[itsmProviderKey]
+            : itsmOptions.Provider;
+        itsmOptions.Provider = ItsmProviderNames.Normalize(configuredItsmProvider);
+
+        services.Configure<ItsmIntegrationOptions>(
+            config.GetSection(ItsmIntegrationOptions.SectionName));
+
         services.AddSingleton<IClock, SystemClock>();
         var providerKey = $"{CloudIntegrationOptions.SectionName}:Provider";
         var providerWasConfigured =
@@ -183,7 +205,14 @@ public static class DependencyInjection
                     "Integrations:Directory:Provider must be 'Simulated' or 'MicrosoftGraph'.");
         }
 
-        services.AddSingleton<IItsmConnector, SimulatedItsmConnector>();
+        services.AddSingleton<IItsmProviderConnector, SimulatedItsmConnector>();
+        services.AddSingleton<IItsmProviderConnector, ServiceNowItsmConnector>();
+        services.AddSingleton<IItsmProviderConnector, JiraServiceManagementItsmConnector>();
+        services.AddSingleton<IItsmProviderConnector, ZendeskItsmConnector>();
+        services.AddSingleton<ItsmProviderSelectionService>();
+        services.AddSingleton<IItsmProviderStatusService>(serviceProvider =>
+            serviceProvider.GetRequiredService<ItsmProviderSelectionService>());
+        services.AddSingleton<IItsmConnector, ConfiguredItsmConnector>();
         services.AddSingleton<INetworkDiagnostics, SimulatedNetworkDiagnostics>();
 
         var connectionString =
@@ -191,12 +220,16 @@ public static class DependencyInjection
 
         if (!string.IsNullOrWhiteSpace(connectionString))
         {
-            services.AddDbContext<AIOpsDbContext>(
+            services.AddDbContextFactory<AIOpsDbContext>(
                 options =>
                     options.UseNpgsql(
                         connectionString,
                         npgsqlOptions =>
                             npgsqlOptions.UseVector()));
+
+            services.AddSingleton<
+                IItsmProviderSelectionStore,
+                PostgresItsmProviderSelectionStore>();
 
             services.AddScoped<IAuditStore, PostgresAuditStore>();
             services.AddScoped<IEvaluationStore, PostgresEvaluationStore>();
@@ -230,6 +263,9 @@ public static class DependencyInjection
             // Fallback for dev/tests when no PostgreSQL connection is configured.
             services.AddSingleton<IAuditStore, InMemoryAuditStore>();
             services.AddSingleton<IEvaluationStore, PostgresEvaluationStore>();
+            services.AddSingleton<
+                IItsmProviderSelectionStore,
+                UnavailableItsmProviderSelectionStore>();
         }
 
         services.AddSingleton<ITicketRepository, InMemoryTicketRepository>();

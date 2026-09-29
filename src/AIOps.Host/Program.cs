@@ -45,13 +45,15 @@ builder.Services
     .AddInteractiveServerComponents();
 
 builder.Services.AddMudServices();
+builder.Services.AddCascadingAuthenticationState();
 
 // --- SignalR (TicketHub stub; events land in Phase 9) ---
 builder.Services.AddSignalR();
 
 // --- Security boundaries from day one ---
 builder.Services.AddAIOpsSecurity(
-    builder.Configuration);
+    builder.Configuration,
+    builder.Environment);
 
 // --- Platform seams (in-memory dev implementations) ---
 builder.Services.AddAIOpsInfrastructure(
@@ -94,6 +96,7 @@ app.UseHttpsRedirection();
 
 app.UseAntiforgery();
 
+app.UseAuthentication();
 app.UseAuthorization();
 
 app.MapStaticAssets();
@@ -171,6 +174,7 @@ app.MapGet(
 app.MapTicketApi();
 app.MapKnowledgeApi();
 app.MapCloudIntegrationApi();
+app.MapItsmIntegrationApi();
 
 app.Run();
 

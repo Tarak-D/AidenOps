@@ -86,3 +86,13 @@ public sealed class DirectoryIntegrationOptions
     /// <summary>Optional managed identity client identifier.</summary>
     public string? ClientId { get; set; }
 }
+
+/// <summary>ITSM provider selection. Provider credentials are intentionally not modeled here.</summary>
+public sealed class ItsmIntegrationOptions
+{
+    public const string SectionName = "Integrations:Itsm";
+
+    public string Provider { get; set; } = "Simulated";
+
+    public int TimeoutSeconds { get; set; } = 30;
+}

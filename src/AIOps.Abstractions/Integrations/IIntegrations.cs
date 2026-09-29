@@ -29,10 +29,38 @@ public interface ICloudProviderStatusService
     CloudProviderStatus GetStatus();
 }
 
-/// <summary>ITSM connector (ServiceNow-style). SIMULATION ONLY.</summary>
+/// <summary>Vendor-independent ticket update operation implemented by the selected ITSM provider.</summary>
 public interface IItsmConnector
 {
     Task<string> UpdateTicketAsync(string externalRef, string note, string? state = null, CancellationToken ct = default);
+}
+
+/// <summary>A provider boundary with safe identity and connectivity status for operator visibility.</summary>
+public interface IItsmProviderConnector : IItsmConnector
+{
+    string ProviderName { get; }
+    string DisplayName { get; }
+    string Mode { get; }
+    bool IsProduction { get; }
+    Task<string> GetConnectionStatusAsync(CancellationToken ct = default);
+}
+
+public sealed record ItsmProviderStatus(
+    string ConfiguredProvider,
+    string ActiveProvider,
+    string DisplayName,
+    string Mode,
+    bool IsProduction,
+    string ConnectionStatus);
+
+public interface IItsmProviderStatusService
+{
+    Task<ItsmProviderStatus> GetStatusAsync(CancellationToken ct = default);
+    Task<ItsmProviderStatus> SelectProviderAsync(
+        string provider,
+        string changedBy,
+        CancellationToken ct = default);
+    Task<string> GetSelectedProviderAsync(CancellationToken ct = default);
 }
 
 /// <summary>Network diagnostics. SIMULATION ONLY.</summary>

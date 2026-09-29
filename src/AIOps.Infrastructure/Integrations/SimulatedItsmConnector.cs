@@ -2,8 +2,19 @@ using AIOps.Abstractions.Integrations;
 
 namespace AIOps.Infrastructure.Integrations;
 
-public sealed class SimulatedItsmConnector : IItsmConnector
+public sealed class SimulatedItsmConnector : IItsmProviderConnector
 {
+    public string ProviderName => "Simulated";
+    public string DisplayName => "Simulated";
+    public string Mode => "Simulated";
+    public bool IsProduction => false;
+
+    public Task<string> GetConnectionStatusAsync(CancellationToken ct = default)
+    {
+        ct.ThrowIfCancellationRequested();
+        return Task.FromResult("Simulated");
+    }
+
     public Task<string> UpdateTicketAsync(
         string externalRef,
         string note,
