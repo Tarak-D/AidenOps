@@ -273,7 +273,47 @@ public static class DependencyInjection
         services.AddSingleton<IItsmProviderStatusService>(serviceProvider =>
             serviceProvider.GetRequiredService<ItsmProviderSelectionService>());
         services.AddSingleton<IItsmConnector, ConfiguredItsmConnector>();
-        services.AddSingleton<INetworkDiagnostics, SimulatedNetworkDiagnostics>();
+        services.AddSingleton<INetworkDiagnosticProvider>(new UnconfiguredNetworkDiagnosticProvider(
+            NetworkDiagnosticCategories.Vpn, "Cisco", "Cisco"));
+        services.AddSingleton<INetworkDiagnosticProvider>(new UnconfiguredNetworkDiagnosticProvider(
+            NetworkDiagnosticCategories.Vpn, "PaloAltoNetworks", "Palo Alto Networks"));
+        services.AddSingleton<INetworkDiagnosticProvider>(new UnconfiguredNetworkDiagnosticProvider(
+            NetworkDiagnosticCategories.Vpn, "Fortinet", "Fortinet"));
+        services.AddSingleton<INetworkDiagnosticProvider>(new UnconfiguredNetworkDiagnosticProvider(
+            NetworkDiagnosticCategories.Vpn, "Cloudflare", "Cloudflare"));
+        services.AddSingleton<INetworkDiagnosticProvider>(new UnconfiguredNetworkDiagnosticProvider(
+            NetworkDiagnosticCategories.Vpn, "Citrix", "Citrix"));
+        services.AddSingleton<INetworkDiagnosticProvider>(new UnconfiguredNetworkDiagnosticProvider(
+            NetworkDiagnosticCategories.Vpn, "OpenVPN", "OpenVPN"));
+        services.AddSingleton<INetworkDiagnosticProvider, SimulatedVpnDiagnosticsProvider>();
+        services.AddSingleton<IVpnDiagnosticsProvider>(_ =>
+            new UnconfiguredVpnDiagnosticsProvider("Cisco", "Cisco"));
+        services.AddSingleton<IVpnDiagnosticsProvider>(_ =>
+            new UnconfiguredVpnDiagnosticsProvider("PaloAltoNetworks", "Palo Alto Networks"));
+        services.AddSingleton<IVpnDiagnosticsProvider>(_ =>
+            new UnconfiguredVpnDiagnosticsProvider("Fortinet", "Fortinet"));
+        services.AddSingleton<IVpnDiagnosticsProvider>(_ =>
+            new UnconfiguredVpnDiagnosticsProvider("Cloudflare", "Cloudflare"));
+        services.AddSingleton<IVpnDiagnosticsProvider>(_ =>
+            new UnconfiguredVpnDiagnosticsProvider("Citrix", "Citrix"));
+        services.AddSingleton<IVpnDiagnosticsProvider>(_ =>
+            new UnconfiguredVpnDiagnosticsProvider("OpenVPN", "OpenVPN"));
+        services.AddSingleton<IVpnDiagnosticsProvider, SimulatedVpnDiagnosticsProvider>();
+        services.AddSingleton<INetworkDiagnosticProvider>(new UnconfiguredNetworkDiagnosticProvider(
+            NetworkDiagnosticCategories.GeneralNetwork, "CiscoThousandEyes", "Cisco ThousandEyes"));
+        services.AddSingleton<INetworkDiagnosticProvider>(new UnconfiguredNetworkDiagnosticProvider(
+            NetworkDiagnosticCategories.GeneralNetwork, "Datadog", "Datadog"));
+        services.AddSingleton<INetworkDiagnosticProvider>(new UnconfiguredNetworkDiagnosticProvider(
+            NetworkDiagnosticCategories.GeneralNetwork, "Dynatrace", "Dynatrace"));
+        services.AddSingleton<INetworkDiagnosticProvider>(new UnconfiguredNetworkDiagnosticProvider(
+            NetworkDiagnosticCategories.GeneralNetwork, "Zabbix", "Zabbix"));
+        services.AddSingleton<INetworkDiagnosticProvider>(new UnconfiguredNetworkDiagnosticProvider(
+            NetworkDiagnosticCategories.GeneralNetwork, "PRTG", "PRTG"));
+        services.AddSingleton<INetworkDiagnosticProvider>(new UnconfiguredNetworkDiagnosticProvider(
+            NetworkDiagnosticCategories.GeneralNetwork, "Simulated", "Simulated", isSimulated: true));
+        services.AddSingleton<INetworkDiagnosticProviderSelectionService, NetworkDiagnosticProviderSelectionService>();
+        services.AddSingleton<SimulatedNetworkDiagnostics>();
+        services.AddSingleton<INetworkDiagnostics, ConfiguredVpnDiagnostics>();
 
         var connectionString =
             config.GetConnectionString("PostgresConnection");
@@ -290,6 +330,9 @@ public static class DependencyInjection
             services.AddSingleton<
                 IItsmProviderSelectionStore,
                 PostgresItsmProviderSelectionStore>();
+            services.AddSingleton<
+                INetworkDiagnosticProviderSelectionStore,
+                PostgresNetworkDiagnosticProviderSelectionStore>();
 
             services.AddScoped<IAuditStore, PostgresAuditStore>();
             services.AddScoped<IEvaluationStore, PostgresEvaluationStore>();
@@ -326,6 +369,9 @@ public static class DependencyInjection
             services.AddSingleton<
                 IItsmProviderSelectionStore,
                 UnavailableItsmProviderSelectionStore>();
+            services.AddSingleton<
+                INetworkDiagnosticProviderSelectionStore,
+                UnavailableNetworkDiagnosticProviderSelectionStore>();
         }
 
         services.AddSingleton<ITicketRepository, InMemoryTicketRepository>();

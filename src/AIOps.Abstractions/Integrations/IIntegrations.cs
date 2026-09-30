@@ -68,3 +68,65 @@ public interface INetworkDiagnostics
 {
     Task<string> RunVpnDiagnosticsAsync(string userOrDeviceId, CancellationToken ct = default);
 }
+
+public static class NetworkDiagnosticCategories
+{
+    public const string Vpn = "Vpn";
+    public const string GeneralNetwork = "GeneralNetwork";
+}
+
+public static class NetworkDiagnosticConnectionStates
+{
+    public const string Simulated = "Simulated";
+    public const string Connected = "Connected";
+    public const string NotConfigured = "NotConfigured";
+    public const string Unavailable = "Unavailable";
+    public const string AuthenticationFailed = "AuthenticationFailed";
+    public const string PermissionDenied = "PermissionDenied";
+    public const string Timeout = "Timeout";
+    public const string ProviderError = "ProviderError";
+}
+
+/// <summary>Safe, provider-independent connectivity state and display reason.</summary>
+public sealed record NetworkDiagnosticProviderHealth(string State, string Reason);
+
+/// <summary>Provider identity and bounded connectivity status for a network diagnostic category.</summary>
+public interface INetworkDiagnosticProvider
+{
+    string Category { get; }
+    string ProviderName { get; }
+    string DisplayName { get; }
+    string Mode { get; }
+    bool IsProduction { get; }
+    Task<NetworkDiagnosticProviderHealth> GetConnectionStatusAsync(CancellationToken ct = default);
+}
+
+/// <summary>Existing VPN diagnostic operation exposed by a selected VPN provider.</summary>
+public interface IVpnDiagnosticsProvider : INetworkDiagnosticProvider
+{
+    Task<string> RunVpnDiagnosticsAsync(string userOrDeviceId, CancellationToken ct = default);
+}
+
+public sealed record NetworkDiagnosticProviderSelection(string Category, string Provider);
+
+public sealed record NetworkDiagnosticProviderStatus(
+    string Category,
+    string ConfiguredProvider,
+    string ActiveProvider,
+    string DisplayName,
+    string Mode,
+    bool IsProduction,
+    string ConnectionStatus,
+    string StatusReason);
+
+public interface INetworkDiagnosticProviderSelectionService
+{
+    Task<NetworkDiagnosticProviderStatus> GetStatusAsync(CancellationToken ct = default);
+    Task<NetworkDiagnosticProviderStatus> SelectProviderAsync(
+        string category,
+        string provider,
+        string changedBy,
+        CancellationToken ct = default);
+    Task<NetworkDiagnosticProviderSelection> GetSelectionAsync(CancellationToken ct = default);
+    Task<string> GetSelectedProviderAsync(string category, CancellationToken ct = default);
+}

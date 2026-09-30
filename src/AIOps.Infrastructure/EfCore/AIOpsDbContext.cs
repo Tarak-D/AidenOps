@@ -25,6 +25,8 @@ public sealed class AIOpsDbContext : DbContext
 
     public DbSet<ItsmProviderSelectionEntity> ItsmProviderSelections { get; set; }
 
+    public DbSet<NetworkDiagnosticProviderSelectionEntity> NetworkDiagnosticProviderSelections { get; set; }
+
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
         modelBuilder.HasPostgresExtension("vector");
@@ -182,6 +184,17 @@ public sealed class AIOpsDbContext : DbContext
             entity.ToTable("integration_provider_selections");
             entity.HasKey(e => e.Id);
             entity.Property(e => e.Id).HasColumnName("id").HasMaxLength(100);
+            entity.Property(e => e.Provider).HasColumnName("provider").HasMaxLength(100).IsRequired();
+            entity.Property(e => e.UpdatedAt).HasColumnName("updated_at").IsRequired();
+            entity.Property(e => e.UpdatedBy).HasColumnName("updated_by").HasMaxLength(200).IsRequired();
+        });
+
+        modelBuilder.Entity<NetworkDiagnosticProviderSelectionEntity>(entity =>
+        {
+            entity.ToTable("network_diagnostic_provider_selections");
+            entity.HasKey(e => e.Id);
+            entity.Property(e => e.Id).HasColumnName("id").HasMaxLength(100);
+            entity.Property(e => e.Category).HasColumnName("category").HasMaxLength(100).IsRequired();
             entity.Property(e => e.Provider).HasColumnName("provider").HasMaxLength(100).IsRequired();
             entity.Property(e => e.UpdatedAt).HasColumnName("updated_at").IsRequired();
             entity.Property(e => e.UpdatedBy).HasColumnName("updated_by").HasMaxLength(200).IsRequired();

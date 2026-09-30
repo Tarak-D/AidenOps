@@ -29,3 +29,35 @@ export async function selectItsmProvider(provider, devIdentity) {
         throw new Error("The ITSM provider selection could not be saved.");
     }
 }
+
+export async function getNetworkDiagnosticProviderStatus() {
+    const response = await fetch("/api/v1/integrations/network-diagnostics/status", {
+        method: "GET",
+        credentials: "same-origin",
+        headers: { "Accept": "application/json" }
+    });
+
+    if (!response.ok) {
+        throw new Error("Network diagnostics provider status is unavailable.");
+    }
+
+    return await response.json();
+}
+
+export async function selectNetworkDiagnosticProvider(category, provider, devIdentity) {
+    const headers = { "Content-Type": "application/json", "Accept": "application/json" };
+    if (devIdentity) {
+        headers["X-Dev-User"] = devIdentity;
+    }
+
+    const response = await fetch("/api/v1/integrations/network-diagnostics/provider", {
+        method: "POST",
+        credentials: "same-origin",
+        headers,
+        body: JSON.stringify({ category, provider })
+    });
+
+    if (!response.ok) {
+        throw new Error("The network diagnostics provider selection could not be saved.");
+    }
+}

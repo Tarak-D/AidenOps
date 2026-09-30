@@ -175,6 +175,7 @@ app.MapTicketApi();
 app.MapKnowledgeApi();
 app.MapCloudIntegrationApi();
 app.MapItsmIntegrationApi();
+app.MapNetworkDiagnosticIntegrationApi();
 
 app.Run();
 

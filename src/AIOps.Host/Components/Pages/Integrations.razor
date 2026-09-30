@@ -84,6 +84,77 @@
         }
     </MudCardContent>
 </MudCard>
+
+<MudCard Elevation="2" Style="max-width: 760px" Class="mt-6">
+    <MudCardHeader>
+        <CardHeaderContent>
+            <MudText Typo="Typo.h5">Network Diagnostics</MudText>
+            <MudText Typo="Typo.body2" Color="Color.Secondary">
+                Select the server-side provider for VPN or general network diagnostics.
+            </MudText>
+        </CardHeaderContent>
+    </MudCardHeader>
+    <MudCardContent>
+        @if (_networkStatus is null)
+        {
+            <MudProgressLinear Indeterminate="true" Color="Color.Primary" Class="mb-4" />
+            <MudText Color="Color.Secondary">Loading network provider status…</MudText>
+        }
+        else
+        {
+            <MudGrid>
+                <MudItem xs="12" md="6">
+                    <MudText Typo="Typo.subtitle2" Class="mb-1">Category</MudText>
+                    <MudSelect T="string" Value="_networkCategory" ValueChanged="NetworkCategoryChangedAsync"
+                               Disabled="@(!_canManage || _networkSaving)" Variant="Variant.Outlined" Dense="true">
+                        <MudSelectItem T="string" Value="@("Vpn")">VPN Diagnostics</MudSelectItem>
+                        <MudSelectItem T="string" Value="@("GeneralNetwork")">General Network Diagnostics</MudSelectItem>
+                    </MudSelect>
+                </MudItem>
+                <MudItem xs="12" md="6">
+                    <MudText Typo="Typo.subtitle2" Class="mb-1">Provider</MudText>
+                    <MudSelect T="string" Value="_networkProvider" ValueChanged="NetworkProviderChangedAsync"
+                               Disabled="@(!_canManage || _networkSaving)" Variant="Variant.Outlined" Dense="true">
+                        @foreach (var provider in NetworkProviders)
+                        {
+                            <MudSelectItem T="string" Value="@provider.Name">@provider.DisplayName</MudSelectItem>
+                        }
+                    </MudSelect>
+                </MudItem>
+                <MudItem xs="12" md="6">
+                    <MudText Typo="Typo.subtitle2">Active provider</MudText>
+                    <MudText Typo="Typo.body1">@_networkStatus.DisplayName</MudText>
+                </MudItem>
+                <MudItem xs="12" md="6">
+                    <MudText Typo="Typo.subtitle2">Status</MudText>
+                    <MudChip T="string" Color="@NetworkStatusColor" Variant="Variant.Outlined">
+                        @NetworkStatusLabel
+                    </MudChip>
+                </MudItem>
+                <MudItem xs="12">
+                    <MudText Typo="Typo.subtitle2">Reason</MudText>
+                    <MudText Typo="Typo.body2">@_networkStatus.StatusReason</MudText>
+                </MudItem>
+            </MudGrid>
+
+            @if (!_canManage)
+            {
+                <MudAlert Severity="Severity.Warning" Variant="Variant.Outlined" Class="mt-4">
+                    <MudIcon Icon="@Icons.Material.Filled.Lock" Class="mr-2" />
+                    Only administrators can change integration providers.
+                </MudAlert>
+            }
+            else
+            {
+                <MudButton Variant="Variant.Filled" Color="Color.Primary" Class="mt-4"
+                           Disabled="@(_networkSaving || (_networkCategory == _networkStatus.Category && _networkProvider == _networkStatus.ConfiguredProvider))"
+                           OnClick="SaveNetworkProviderAsync">
+                    @(_networkSaving ? "Saving…" : "Switch Provider")
+                </MudButton>
+            }
+        }
+    </MudCardContent>
+</MudCard>
 </div>
 
 @code {
@@ -92,6 +163,44 @@
     private string? _selectedProvider;
     private bool _canManage;
     private bool _saving;
+    private AIOps.Abstractions.Integrations.NetworkDiagnosticProviderStatus? _networkStatus;
+    private string _networkCategory = "Vpn";
+    private string _networkProvider = "Simulated";
+    private bool _networkSaving;
+
+    private IEnumerable<(string Name, string DisplayName)> NetworkProviders =>
+        _networkCategory == "GeneralNetwork"
+            ? new[]
+            {
+                ("CiscoThousandEyes", "Cisco ThousandEyes"), ("Datadog", "Datadog"),
+                ("Dynatrace", "Dynatrace"), ("Zabbix", "Zabbix"), ("PRTG", "PRTG"),
+                ("Simulated", "Simulated")
+            }
+            : new[]
+            {
+                ("Cisco", "Cisco"), ("PaloAltoNetworks", "Palo Alto Networks"),
+                ("Fortinet", "Fortinet"), ("Cloudflare", "Cloudflare"), ("Citrix", "Citrix"),
+                ("OpenVPN", "OpenVPN"), ("Simulated", "Simulated")
+            };
+
+    private Color NetworkStatusColor => _networkStatus?.ConnectionStatus switch
+    {
+        "Simulated" or "Connected" => Color.Success,
+        "NotConfigured" or "Unavailable" or "Timeout" => Color.Warning,
+        _ => Color.Error
+    };
+
+    private string NetworkStatusLabel => _networkStatus?.ConnectionStatus switch
+    {
+        "NotConfigured" => "Not Configured",
+        "AuthenticationFailed" => "Authentication Failed",
+        "PermissionDenied" => "Permission Denied",
+        "ProviderError" => "Provider Error",
+        "Simulated" => "Simulated",
+        "Connected" => "Connected",
+        "Timeout" => "Timeout",
+        _ => "Unavailable"
+    };
 
     private Color StatusColor => _status?.ConnectionStatus switch
     {
@@ -120,6 +229,7 @@
             _itsmApi = await JS.InvokeAsync<Microsoft.JSInterop.IJSObjectReference>(
                 "import", "./Components/Layout/MainLayout.razor.js");
             await RefreshStatusAsync();
+            await RefreshNetworkStatusAsync();
         }
         catch
         {
@@ -189,5 +299,69 @@
         _status = await _itsmApi!.InvokeAsync<AIOps.Abstractions.Integrations.ItsmProviderStatus>(
             "getItsmProviderStatus");
         _selectedProvider = _status.ConfiguredProvider;
+    }
+
+    private Task NetworkCategoryChangedAsync(string category)
+    {
+        _networkCategory = category;
+        _networkProvider = "Simulated";
+        return Task.CompletedTask;
+    }
+
+    private Task NetworkProviderChangedAsync(string provider)
+    {
+        _networkProvider = provider;
+        return Task.CompletedTask;
+    }
+
+    private async Task SaveNetworkProviderAsync()
+    {
+        if (!_canManage || _networkSaving || _networkStatus is null)
+        {
+            return;
+        }
+
+        _networkSaving = true;
+        try
+        {
+            var user = (await AuthenticationStateProvider.GetAuthenticationStateAsync()).User;
+            var authorization = await AuthorizationService.AuthorizeAsync(
+                user, resource: null, AuthPolicies.CanManageIntegrations);
+            if (!authorization.Succeeded ||
+                (!HostEnvironment.IsDevelopment() && user.Identity?.AuthenticationType ==
+                    SecurityExtensions.DevIdentityHandler.SchemeName))
+            {
+                _canManage = false;
+                Snackbar.Add("Administrator authorization is required to change the network provider.", Severity.Error);
+                return;
+            }
+
+            _itsmApi ??= await JS.InvokeAsync<Microsoft.JSInterop.IJSObjectReference>(
+                "import", "./Components/Layout/MainLayout.razor.js");
+            var devIdentity = user.Identity?.AuthenticationType ==
+                SecurityExtensions.DevIdentityHandler.SchemeName ? user.Identity.Name : null;
+            await _itsmApi.InvokeVoidAsync(
+                "selectNetworkDiagnosticProvider", _networkCategory, _networkProvider, devIdentity);
+            await RefreshNetworkStatusAsync();
+            _networkCategory = _networkStatus!.Category;
+            _networkProvider = _networkStatus.ConfiguredProvider;
+            Snackbar.Add("Network provider status refreshed from the server.", Severity.Success);
+        }
+        catch
+        {
+            Snackbar.Add("The network provider selection could not be saved.", Severity.Error);
+        }
+        finally
+        {
+            _networkSaving = false;
+        }
+    }
+
+    private async Task RefreshNetworkStatusAsync()
+    {
+        _networkStatus = await _itsmApi!.InvokeAsync<AIOps.Abstractions.Integrations.NetworkDiagnosticProviderStatus>(
+            "getNetworkDiagnosticProviderStatus");
+        _networkCategory = _networkStatus.Category;
+        _networkProvider = _networkStatus.ConfiguredProvider;
     }
 }
