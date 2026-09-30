@@ -46,8 +46,8 @@ public sealed class SimulatedVpnDiagnosticsProvider(SimulatedNetworkDiagnostics 
             "Diagnostics are handled by the local simulated provider."));
     }
 
-    public Task<string> RunVpnDiagnosticsAsync(string userOrDeviceId, CancellationToken ct = default) =>
-        diagnostics.RunVpnDiagnosticsAsync(userOrDeviceId, ct);
+    public Task<VpnDiagnosticResult> RunVpnDiagnosticsAsync(VpnDiagnosticRequest request, CancellationToken ct = default) =>
+        diagnostics.RunVpnDiagnosticsAsync(request, ct);
 }
 
 /// <summary>Rejects execution through a VPN provider slot until a real adapter is implemented.</summary>
@@ -69,7 +69,7 @@ public sealed class UnconfiguredVpnDiagnosticsProvider(
             "Provider credentials/configuration are not available."));
     }
 
-    public Task<string> RunVpnDiagnosticsAsync(string userOrDeviceId, CancellationToken ct = default)
+    public Task<VpnDiagnosticResult> RunVpnDiagnosticsAsync(VpnDiagnosticRequest request, CancellationToken ct = default)
     {
         ct.ThrowIfCancellationRequested();
         throw new InvalidOperationException("NetworkProviderNotConfigured: Provider credentials/configuration are not available.");

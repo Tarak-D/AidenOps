@@ -66,7 +66,140 @@ public interface IItsmProviderStatusService
 /// <summary>Network diagnostics. SIMULATION ONLY.</summary>
 public interface INetworkDiagnostics
 {
-    Task<string> RunVpnDiagnosticsAsync(string userOrDeviceId, CancellationToken ct = default);
+    Task<VpnDiagnosticResult> RunVpnDiagnosticsAsync(VpnDiagnosticRequest request, CancellationToken ct = default);
+}
+
+public enum NetworkDiagnosticTargetType
+{
+    User,
+    Device,
+    Ip,
+    Host,
+    Url,
+    Service,
+    Monitor
+}
+
+public enum NetworkDiagnosticObservationType
+{
+    Session,
+    ActiveTest,
+    Monitoring
+}
+
+/// <summary>Explicitly typed target for a VPN diagnostic request.</summary>
+public sealed record VpnDiagnosticRequest
+{
+    public VpnDiagnosticRequest(string target, NetworkDiagnosticTargetType targetType)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(target);
+        if (targetType is not (NetworkDiagnosticTargetType.User or NetworkDiagnosticTargetType.Device or NetworkDiagnosticTargetType.Ip))
+        {
+            throw new ArgumentOutOfRangeException(nameof(targetType), "VPN target type must be User, Device, or Ip.");
+        }
+
+        Target = target.Trim();
+        TargetType = targetType;
+    }
+
+    public string Target { get; }
+    public NetworkDiagnosticTargetType TargetType { get; }
+}
+
+/// <summary>
+/// Provider-normalized details. Sensitive credential-bearing field names are rejected;
+/// adapters should add only explicitly normalized, non-secret fields.
+/// </summary>
+public sealed record NetworkDiagnosticProviderDetails
+{
+    private static readonly HashSet<string> AllowedFieldNames = new(StringComparer.OrdinalIgnoreCase)
+    {
+        "agentName", "clientVersion", "connectionType", "devicePlatform", "gateway", "hostName",
+        "ipVersion", "location", "metricName", "metricUnit", "monitorId", "networkName",
+        "assignedIpv6", "loginTime", "observationId", "profileName", "providerStatus", "publicIp", "region", "sessionId", "source",
+        "state", "status", "testId", "tunnelId", "tunnelProtocol", "vpn", "vpnType"
+    };
+    private static readonly string[] SensitiveFieldParts =
+    [
+        "password", "secret", "token", "credential", "authorization", "apikey", "api_key",
+        "privatekey", "private_key", "certificate", "cookie", "header"
+    ];
+
+    public NetworkDiagnosticProviderDetails(IReadOnlyDictionary<string, string?> fields)
+    {
+        ArgumentNullException.ThrowIfNull(fields);
+        if (fields.Any(field => string.IsNullOrWhiteSpace(field.Key) ||
+                                SensitiveFieldParts.Any(part => field.Key.Contains(part, StringComparison.OrdinalIgnoreCase)) ||
+                                !AllowedFieldNames.Contains(field.Key.Split('.').Last()) ||
+                                LooksLikeAuthorizationMaterial(field.Value)))
+        {
+            throw new ArgumentException("Provider details may contain only allow-listed normalized fields.", nameof(fields));
+        }
+
+        Fields = new System.Collections.ObjectModel.ReadOnlyDictionary<string, string?>(
+            fields.ToDictionary(field => field.Key, field => field.Value, StringComparer.Ordinal));
+    }
+
+    public IReadOnlyDictionary<string, string?> Fields { get; }
+
+    private static bool LooksLikeAuthorizationMaterial(string? value) =>
+        value is not null &&
+        (value.StartsWith("Bearer ", StringComparison.OrdinalIgnoreCase) ||
+         value.StartsWith("Basic ", StringComparison.OrdinalIgnoreCase) ||
+         value.Contains("-----BEGIN ", StringComparison.OrdinalIgnoreCase));
+}
+
+public sealed record VpnDiagnosticResult(
+    string Status,
+    string Provider,
+    NetworkDiagnosticObservationType ObservationType,
+    DateTimeOffset ObservedAt,
+    string? User,
+    string? Device,
+    string? Ip,
+    string? ConnectionState,
+    double? Latency,
+    double? PacketLoss,
+    NetworkDiagnosticProviderDetails? ProviderDetails);
+
+/// <summary>Explicitly typed target for a general network diagnostic request.</summary>
+public sealed record GeneralNetworkDiagnosticRequest
+{
+    public GeneralNetworkDiagnosticRequest(string target, NetworkDiagnosticTargetType targetType)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(target);
+        if (targetType is not (NetworkDiagnosticTargetType.Ip or NetworkDiagnosticTargetType.Host or
+            NetworkDiagnosticTargetType.Url or NetworkDiagnosticTargetType.Service or NetworkDiagnosticTargetType.Monitor))
+        {
+            throw new ArgumentOutOfRangeException(nameof(targetType), "General network target type must be Ip, Host, Url, Service, or Monitor.");
+        }
+
+        Target = target.Trim();
+        TargetType = targetType;
+    }
+
+    public string Target { get; }
+    public NetworkDiagnosticTargetType TargetType { get; }
+}
+
+public sealed record GeneralNetworkDiagnosticResult(
+    string Status,
+    string Provider,
+    NetworkDiagnosticObservationType ObservationType,
+    DateTimeOffset ObservedAt,
+    string Target,
+    string State,
+    double? Latency,
+    double? PacketLoss,
+    string? ExecutionId,
+    NetworkDiagnosticProviderDetails? ProviderDetails);
+
+/// <summary>General network diagnostic operation; no providers execute through this contract yet.</summary>
+public interface IGeneralNetworkDiagnostics
+{
+    Task<GeneralNetworkDiagnosticResult> RunDiagnosticsAsync(
+        GeneralNetworkDiagnosticRequest request,
+        CancellationToken ct = default);
 }
 
 public static class NetworkDiagnosticCategories
@@ -104,7 +237,7 @@ public interface INetworkDiagnosticProvider
 /// <summary>Existing VPN diagnostic operation exposed by a selected VPN provider.</summary>
 public interface IVpnDiagnosticsProvider : INetworkDiagnosticProvider
 {
-    Task<string> RunVpnDiagnosticsAsync(string userOrDeviceId, CancellationToken ct = default);
+    Task<VpnDiagnosticResult> RunVpnDiagnosticsAsync(VpnDiagnosticRequest request, CancellationToken ct = default);
 }
 
 public sealed record NetworkDiagnosticProviderSelection(string Category, string Provider);

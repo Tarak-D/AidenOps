@@ -19,12 +19,12 @@ public sealed class RunVpnDiagnosticsTool : ITool
     public string Name => "Network.RunVpnDiagnostics";
 
     public string Description =>
-        "Runs VPN diagnostics for a user or device. This is a read-only diagnostic operation.";
+        "Runs VPN diagnostics for a user, device, or IP address. This is a read-only diagnostic operation.";
 
     public RiskLevel Risk => RiskLevel.Safe;
 
     public string InputSchemaJson => """
-        {"type":"object","properties":{"userOrDeviceId":{"type":"string","minLength":1}},"required":["userOrDeviceId"],"additionalProperties":false}
+        {"oneOf":[{"type":"object","properties":{"target":{"type":"string","minLength":1},"targetType":{"type":"string","enum":["User","Device","Ip"]}},"required":["target","targetType"],"additionalProperties":false},{"type":"object","properties":{"userOrDeviceId":{"type":"string","minLength":1}},"required":["userOrDeviceId"],"additionalProperties":false}]}
         """;
 
     public bool RequiresApproval => false;
@@ -36,23 +36,37 @@ public sealed class RunVpnDiagnosticsTool : ITool
     {
         ArgumentNullException.ThrowIfNull(ctx);
 
-        string userOrDeviceId;
+        VpnDiagnosticRequest request;
 
         try
         {
             using var document = JsonDocument.Parse(argumentsJson);
 
-            if (!document.RootElement.TryGetProperty(
-                    "userOrDeviceId",
-                    out var idElement))
+            if (document.RootElement.TryGetProperty("target", out var targetElement) &&
+                document.RootElement.TryGetProperty("targetType", out var targetTypeElement) &&
+                targetElement.ValueKind == JsonValueKind.String &&
+                targetTypeElement.ValueKind == JsonValueKind.String)
+            {
+                if (!Enum.TryParse<NetworkDiagnosticTargetType>(targetTypeElement.GetString(), true, out var targetType))
+                {
+                    return new ToolResult(false, "Argument 'targetType' must be User, Device, or Ip.", Error: "InvalidArguments");
+                }
+
+                request = new VpnDiagnosticRequest(targetElement.GetString()!, targetType);
+            }
+            else if (document.RootElement.TryGetProperty("userOrDeviceId", out var legacyTarget) &&
+                     legacyTarget.ValueKind == JsonValueKind.String)
+            {
+                // Existing Python Gateway proposals pass the ticket reporter email through this legacy field.
+                request = new VpnDiagnosticRequest(legacyTarget.GetString()!, NetworkDiagnosticTargetType.User);
+            }
+            else
             {
                 return new ToolResult(
                     false,
-                    "Required argument 'userOrDeviceId' was not provided.",
+                    "Required arguments 'target' and 'targetType' were not provided.",
                     Error: "InvalidArguments");
             }
-
-            userOrDeviceId = idElement.GetString() ?? string.Empty;
         }
         catch (JsonException)
         {
@@ -62,24 +76,24 @@ public sealed class RunVpnDiagnosticsTool : ITool
                 Error: "InvalidArguments");
         }
 
-        if (string.IsNullOrWhiteSpace(userOrDeviceId))
+        catch (ArgumentException)
         {
             return new ToolResult(
                 false,
-                "Argument 'userOrDeviceId' must not be empty.",
+                "Arguments 'target' and 'targetType' are invalid.",
                 Error: "InvalidArguments");
         }
 
         try
         {
             var result = await _networkDiagnostics.RunVpnDiagnosticsAsync(
-                userOrDeviceId,
+                request,
                 ct);
 
             return new ToolResult(
                 true,
-                $"VPN diagnostics completed successfully for '{userOrDeviceId}'.",
-                DetailsJson: result);
+                $"VPN diagnostics completed successfully for '{request.Target}'.",
+                DetailsJson: JsonSerializer.Serialize(result));
         }
         catch (OperationCanceledException) when (ct.IsCancellationRequested)
         {
@@ -89,7 +103,7 @@ public sealed class RunVpnDiagnosticsTool : ITool
         {
             return new ToolResult(
                 false,
-                $"VPN diagnostics failed for '{userOrDeviceId}'.",
+                $"VPN diagnostics failed for '{request.Target}'.",
                 Error: ex.Message);
         }
     }

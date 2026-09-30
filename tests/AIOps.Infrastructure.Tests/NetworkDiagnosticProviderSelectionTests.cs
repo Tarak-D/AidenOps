@@ -39,7 +39,7 @@ public sealed class NetworkDiagnosticProviderSelectionTests
     }
 
     [Theory]
-    [InlineData("Vpn", "Cisco", "Cisco")]
+    [InlineData("Vpn", "Cisco", "Cisco Secure Access")]
     [InlineData("GeneralNetwork", "CiscoThousandEyes", "Cisco ThousandEyes")]
     public async Task SelectionPersistsValidProviderForCategory(string category, string provider, string displayName)
     {
@@ -108,10 +108,15 @@ public sealed class NetworkDiagnosticProviderSelectionTests
         var selection = new NetworkDiagnosticProviderSelectionService(store, CreateProviders());
         var router = new ConfiguredVpnDiagnostics(selection, CreateVpnProviders());
 
-        var result = await router.RunVpnDiagnosticsAsync("device-42");
+        var result = await router.RunVpnDiagnosticsAsync(
+            new VpnDiagnosticRequest("device-42", NetworkDiagnosticTargetType.Device));
 
-        Assert.Contains("\"userOrDeviceId\":\"device-42\"", result);
-        Assert.Contains("\"provider\":\"simulated\"", result);
+        Assert.Equal("device-42", result.Device);
+        Assert.Equal("Success", result.Status);
+        Assert.Equal("Simulated", result.Provider);
+        Assert.Equal(NetworkDiagnosticObservationType.Session, result.ObservationType);
+        Assert.Equal(24, result.Latency);
+        Assert.Equal(0, result.PacketLoss);
     }
 
     [Fact]
@@ -123,7 +128,8 @@ public sealed class NetworkDiagnosticProviderSelectionTests
         var router = new ConfiguredVpnDiagnostics(selection, CreateVpnProviders());
 
         var error = await Assert.ThrowsAsync<InvalidOperationException>(
-            () => router.RunVpnDiagnosticsAsync("device-1"));
+            () => router.RunVpnDiagnosticsAsync(
+                new VpnDiagnosticRequest("device-1", NetworkDiagnosticTargetType.Device)));
 
         Assert.Contains("NetworkProviderNotConfigured", error.Message);
     }
@@ -131,7 +137,7 @@ public sealed class NetworkDiagnosticProviderSelectionTests
     private static INetworkDiagnosticProvider[] CreateProviders() =>
     [
         new SimulatedVpnDiagnosticsProvider(new SimulatedNetworkDiagnostics()),
-        new Provider("Vpn", "Cisco", "Cisco"),
+        new Provider("Vpn", "Cisco", "Cisco Secure Access"),
         new Provider("Vpn", "PaloAltoNetworks", "Palo Alto Networks"),
         new Provider("Vpn", "Fortinet", "Fortinet"),
         new Provider("Vpn", "Cloudflare", "Cloudflare"),

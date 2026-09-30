@@ -71,6 +71,17 @@ public static class DependencyInjection
         services.Configure<DirectoryIntegrationOptions>(
             config.GetSection(DirectoryIntegrationOptions.SectionName));
 
+        var ciscoSecureAccessOptions = new CiscoSecureAccessOptions();
+        config.GetSection(CiscoSecureAccessOptions.SectionName).Bind(ciscoSecureAccessOptions);
+        if (ciscoSecureAccessOptions.TimeoutSeconds <= 0)
+        {
+            throw new InvalidOperationException(
+                "Integrations:NetworkDiagnostics:CiscoSecureAccess:TimeoutSeconds must be greater than zero.");
+        }
+
+        services.Configure<CiscoSecureAccessOptions>(
+            config.GetSection(CiscoSecureAccessOptions.SectionName));
+
         var itsmOptions = new ItsmIntegrationOptions();
         config.GetSection(ItsmIntegrationOptions.SectionName).Bind(itsmOptions);
 
@@ -273,8 +284,20 @@ public static class DependencyInjection
         services.AddSingleton<IItsmProviderStatusService>(serviceProvider =>
             serviceProvider.GetRequiredService<ItsmProviderSelectionService>());
         services.AddSingleton<IItsmConnector, ConfiguredItsmConnector>();
-        services.AddSingleton<INetworkDiagnosticProvider>(new UnconfiguredNetworkDiagnosticProvider(
-            NetworkDiagnosticCategories.Vpn, "Cisco", "Cisco"));
+        services.AddHttpClient("CiscoSecureAccess", (serviceProvider, client) =>
+        {
+            var options = serviceProvider
+                .GetRequiredService<Microsoft.Extensions.Options.IOptions<CiscoSecureAccessOptions>>()
+                .Value;
+            client.Timeout = TimeSpan.FromSeconds(options.TimeoutSeconds);
+        });
+        services.AddSingleton<CiscoSecureAccessVpnProvider>(serviceProvider =>
+            new CiscoSecureAccessVpnProvider(
+                serviceProvider.GetRequiredService<IHttpClientFactory>().CreateClient("CiscoSecureAccess"),
+                serviceProvider.GetRequiredService<Microsoft.Extensions.Options.IOptions<CiscoSecureAccessOptions>>(),
+                serviceProvider.GetRequiredService<TimeProvider>()));
+        services.AddSingleton<INetworkDiagnosticProvider>(serviceProvider =>
+            serviceProvider.GetRequiredService<CiscoSecureAccessVpnProvider>());
         services.AddSingleton<INetworkDiagnosticProvider>(new UnconfiguredNetworkDiagnosticProvider(
             NetworkDiagnosticCategories.Vpn, "PaloAltoNetworks", "Palo Alto Networks"));
         services.AddSingleton<INetworkDiagnosticProvider>(new UnconfiguredNetworkDiagnosticProvider(
@@ -286,8 +309,8 @@ public static class DependencyInjection
         services.AddSingleton<INetworkDiagnosticProvider>(new UnconfiguredNetworkDiagnosticProvider(
             NetworkDiagnosticCategories.Vpn, "OpenVPN", "OpenVPN"));
         services.AddSingleton<INetworkDiagnosticProvider, SimulatedVpnDiagnosticsProvider>();
-        services.AddSingleton<IVpnDiagnosticsProvider>(_ =>
-            new UnconfiguredVpnDiagnosticsProvider("Cisco", "Cisco"));
+        services.AddSingleton<IVpnDiagnosticsProvider>(serviceProvider =>
+            serviceProvider.GetRequiredService<CiscoSecureAccessVpnProvider>());
         services.AddSingleton<IVpnDiagnosticsProvider>(_ =>
             new UnconfiguredVpnDiagnosticsProvider("PaloAltoNetworks", "Palo Alto Networks"));
         services.AddSingleton<IVpnDiagnosticsProvider>(_ =>

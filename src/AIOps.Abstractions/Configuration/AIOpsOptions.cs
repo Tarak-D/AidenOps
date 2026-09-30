@@ -103,6 +103,20 @@ public sealed class ItsmIntegrationOptions
     public ZendeskItsmOptions Zendesk { get; set; } = new();
 }
 
+/// <summary>Server-side Cisco Secure Access VPN API configuration.</summary>
+public sealed class CiscoSecureAccessOptions
+{
+    public const string SectionName = "Integrations:NetworkDiagnostics:CiscoSecureAccess";
+
+    public string BaseUrl { get; set; } = "https://api.sse.cisco.com/";
+
+    public string? ClientId { get; set; }
+
+    public string? ClientSecret { get; set; }
+
+    public int TimeoutSeconds { get; set; } = 30;
+}
+
 /// <summary>
 /// Server-side ServiceNow OAuth client configuration. ClientSecret must be supplied
 /// through user-secrets, a secret store, or environment configuration.

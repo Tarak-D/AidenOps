@@ -16,7 +16,7 @@ public static class NetworkDiagnosticProviderNames
         {
             [NetworkDiagnosticCategories.Vpn] = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
             {
-                ["Cisco"] = "Cisco",
+                ["Cisco"] = "Cisco Secure Access",
                 ["PaloAltoNetworks"] = "Palo Alto Networks",
                 ["Fortinet"] = "Fortinet",
                 ["Cloudflare"] = "Cloudflare",
@@ -183,14 +183,15 @@ public sealed class ConfiguredVpnDiagnostics : AIOps.Abstractions.Integrations.I
         _providers = providers.ToDictionary(provider => provider.ProviderName, StringComparer.OrdinalIgnoreCase);
     }
 
-    public async Task<string> RunVpnDiagnosticsAsync(string userOrDeviceId, CancellationToken ct = default)
+    public async Task<VpnDiagnosticResult> RunVpnDiagnosticsAsync(VpnDiagnosticRequest request, CancellationToken ct = default)
     {
+        ArgumentNullException.ThrowIfNull(request);
         var selected = await _selection.GetSelectedProviderAsync(NetworkDiagnosticCategories.Vpn, ct);
         if (!_providers.TryGetValue(selected, out var provider))
         {
             throw new InvalidOperationException("The selected VPN diagnostics provider is not registered.");
         }
 
-        return await provider.RunVpnDiagnosticsAsync(userOrDeviceId, ct);
+        return await provider.RunVpnDiagnosticsAsync(request, ct);
     }
 }
