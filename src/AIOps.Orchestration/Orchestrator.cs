@@ -2,6 +2,7 @@ using AIOps.Abstractions.Agents;
 using AIOps.Abstractions.Audit;
 using AIOps.Abstractions.Configuration;
 using AIOps.Abstractions.Grains;
+using AIOps.Abstractions.Diagnostics;
 using AIOps.Abstractions.Persistence;
 using AIOps.Abstractions.Time;
 using AIOps.Abstractions.Tools;
@@ -97,10 +98,26 @@ public sealed class Orchestrator
     /// <summary>
     /// Starts an agent run for an existing ticket.
     /// </summary>
-    public async Task<AgentRunResult> StartAgentRunAsync(
+    public Task<AgentRunResult> StartAgentRunAsync(
         Guid ticketId,
         AgentRunRequest request,
         CancellationToken ct = default)
+    {
+        ArgumentNullException.ThrowIfNull(request);
+        return AIOpsDiagnostics.TrackAsync(
+            "agent",
+            "Orchestrator",
+            "start_run",
+            () => StartAgentRunCoreAsync(ticketId, request, ct),
+            ct,
+            request.CorrelationId,
+            result => result.Outcome == AgentRunOutcome.Failed ? "agent_run_failed" : null);
+    }
+
+    private async Task<AgentRunResult> StartAgentRunCoreAsync(
+        Guid ticketId,
+        AgentRunRequest request,
+        CancellationToken ct)
     {
         var grain = _cluster.GetGrain<ITicketGrain>(ticketId);
         var state = await grain.GetState();
@@ -448,10 +465,23 @@ public sealed class Orchestrator
     /// Resumes from a narrow ticket/action selector. All approval and execution
     /// values are loaded from persisted server state.
     /// </summary>
-    public async Task<AgentRunResult> ResumeAgentRunAsync(
+    public Task<AgentRunResult> ResumeAgentRunAsync(
         Guid ticketId,
         Guid actionExecutionId,
-        CancellationToken ct = default)
+        CancellationToken ct = default) =>
+        AIOpsDiagnostics.TrackAsync(
+            "agent",
+            "Orchestrator",
+            "resume_run",
+            () => ResumeAgentRunCoreAsync(ticketId, actionExecutionId, ct),
+            ct,
+            actionExecutionId,
+            result => result.Outcome == AgentRunOutcome.Failed ? "agent_run_failed" : null);
+
+    private async Task<AgentRunResult> ResumeAgentRunCoreAsync(
+        Guid ticketId,
+        Guid actionExecutionId,
+        CancellationToken ct)
     {
         var actionId = actionExecutionId;
         var correlationId = actionId == Guid.Empty ? Guid.Empty : actionId;

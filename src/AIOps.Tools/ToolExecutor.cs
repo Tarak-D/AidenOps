@@ -1,4 +1,5 @@
 using AIOps.Abstractions;
+using AIOps.Abstractions.Diagnostics;
 using AIOps.Abstractions.Time;
 using AIOps.Abstractions.Tools;
 using AIOps.Domain;
@@ -26,9 +27,24 @@ public sealed class ToolExecutor
         _clock = clock;
     }
 
-    public async Task<ToolResult> ExecuteAsync(
+    public Task<ToolResult> ExecuteAsync(
         ActionExecution actionExecution,
         CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(actionExecution);
+        return AIOpsDiagnostics.TrackAsync(
+            "tool",
+            "ToolExecutor",
+            "execute",
+            () => ExecuteCoreAsync(actionExecution, cancellationToken),
+            cancellationToken,
+            actionExecution.Id,
+            result => result.Success ? null : "ToolExecutionFailed");
+    }
+
+    private async Task<ToolResult> ExecuteCoreAsync(
+        ActionExecution actionExecution,
+        CancellationToken cancellationToken)
     {
         var tool = _toolRegistry.Get(actionExecution.ToolName);
 

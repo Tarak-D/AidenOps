@@ -1,4 +1,5 @@
 using AIOps.Abstractions.Integrations;
+using AIOps.Abstractions.Diagnostics;
 using AIOps.Abstractions.Persistence;
 
 namespace AIOps.Infrastructure.Integrations;
@@ -92,7 +93,25 @@ public sealed class NetworkDiagnosticProviderSelectionService : INetworkDiagnost
         NetworkDiagnosticProviderHealth health;
         try
         {
-            health = await provider.GetConnectionStatusAsync(ct);
+            health = await AIOpsDiagnostics.TrackAsync(
+                "network_diagnostics",
+                provider.ProviderName,
+                "status_check",
+                () => provider.GetConnectionStatusAsync(ct),
+                ct,
+                failureType: result => result.State is
+                    NetworkDiagnosticConnectionStates.Connected or
+                    NetworkDiagnosticConnectionStates.Simulated
+                        ? null
+                        : result.State switch
+                        {
+                            NetworkDiagnosticConnectionStates.NotConfigured => "not_configured",
+                            NetworkDiagnosticConnectionStates.AuthenticationFailed => "authentication_failed",
+                            NetworkDiagnosticConnectionStates.PermissionDenied => "permission_denied",
+                            NetworkDiagnosticConnectionStates.Timeout => "timeout",
+                            NetworkDiagnosticConnectionStates.Unavailable => "unavailable",
+                            _ => "provider_error"
+                        });
         }
         catch (OperationCanceledException) when (ct.IsCancellationRequested)
         {
@@ -192,6 +211,11 @@ public sealed class ConfiguredVpnDiagnostics : AIOps.Abstractions.Integrations.I
             throw new InvalidOperationException("The selected VPN diagnostics provider is not registered.");
         }
 
-        return await provider.RunVpnDiagnosticsAsync(request, ct);
+        return await AIOpsDiagnostics.TrackAsync(
+            "network_diagnostics",
+            provider.ProviderName,
+            "run_vpn_diagnostics",
+            () => provider.RunVpnDiagnosticsAsync(request, ct),
+            ct);
     }
 }

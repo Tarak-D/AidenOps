@@ -1,4 +1,5 @@
 using AIOps.Abstractions.Configuration;
+using AIOps.Abstractions.Diagnostics;
 using AIOps.Abstractions.Integrations;
 using AIOps.Abstractions.Persistence;
 using Microsoft.Extensions.Options;
@@ -49,7 +50,23 @@ public sealed class ItsmProviderSelectionService : IItsmProviderStatusService
         string connectionStatus;
         try
         {
-            connectionStatus = await connector.GetConnectionStatusAsync(ct);
+            connectionStatus = await AIOpsDiagnostics.TrackAsync(
+                "itsm",
+                connector.ProviderName,
+                "status_check",
+                () => connector.GetConnectionStatusAsync(ct),
+                ct,
+                failureType: state => state is "Connected" or "Simulated"
+                    ? null
+                    : state switch
+                    {
+                        "NotConfigured" => "not_configured",
+                        "AuthenticationFailed" => "authentication_failed",
+                        "PermissionDenied" => "permission_denied",
+                        "Timeout" => "timeout",
+                        "Unavailable" => "unavailable",
+                        _ => "provider_error"
+                    });
         }
         catch (OperationCanceledException) when (ct.IsCancellationRequested)
         {
@@ -136,6 +153,11 @@ public sealed class ConfiguredItsmConnector : IItsmConnector
                 $"No ITSM connector is registered for provider '{selected}'.");
         }
 
-        return await connector.UpdateTicketAsync(externalRef, note, state, ct);
+        return await AIOpsDiagnostics.TrackAsync(
+            "itsm",
+            connector.ProviderName,
+            "update_ticket",
+            () => connector.UpdateTicketAsync(externalRef, note, state, ct),
+            ct);
     }
 }

@@ -1,4 +1,5 @@
 using Azure.Identity;
+using AIOps.Abstractions.Diagnostics;
 using Microsoft.Graph;
 using Microsoft.Graph.Models;
 using Microsoft.Graph.Models.ODataErrors;
@@ -19,7 +20,15 @@ public sealed class MicrosoftGraphDirectoryService : AIOps.Abstractions.Integrat
 
     public Task<string> ResetPasswordAsync(
         string userPrincipalName,
-        CancellationToken ct = default)
+        CancellationToken ct = default) =>
+        AIOpsDiagnostics.TrackAsync(
+            "directory", "MicrosoftGraph", "reset_password",
+            () => ResetPasswordCoreAsync(userPrincipalName, ct),
+            ct);
+
+    private Task<string> ResetPasswordCoreAsync(
+        string userPrincipalName,
+        CancellationToken ct)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(userPrincipalName);
         ct.ThrowIfCancellationRequested();
@@ -29,10 +38,19 @@ public sealed class MicrosoftGraphDirectoryService : AIOps.Abstractions.Integrat
             "Production password reset is unsupported until a secure temporary-password delivery flow is configured.");
     }
 
-    public async Task<string> GrantGroupAccessAsync(
+    public Task<string> GrantGroupAccessAsync(
         string userPrincipalName,
         string groupId,
-        CancellationToken ct = default)
+        CancellationToken ct = default) =>
+        AIOpsDiagnostics.TrackAsync(
+            "directory", "MicrosoftGraph", "grant_group_access",
+            () => GrantGroupAccessCoreAsync(userPrincipalName, groupId, ct),
+            ct);
+
+    private async Task<string> GrantGroupAccessCoreAsync(
+        string userPrincipalName,
+        string groupId,
+        CancellationToken ct)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(userPrincipalName);
         ArgumentException.ThrowIfNullOrWhiteSpace(groupId);

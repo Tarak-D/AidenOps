@@ -52,8 +52,7 @@ public sealed class PythonAgentGateway(
             {
                 return await CreateHttpFailureResultAsync(
                     response,
-                    "Python agent start request failed.",
-                    ct);
+                    "Python agent start request failed.");
             }
 
             var body =
@@ -75,12 +74,12 @@ public sealed class PythonAgentGateway(
         catch (Exception ex)
         {
             logger.LogError(
-                ex,
-                "Python agent start request failed for correlation {CorrelationId}.",
-                request.CorrelationId);
+                "Python agent start request failed for correlation {CorrelationId} (error type {ErrorType}).",
+                request.CorrelationId,
+                ex.GetType().Name);
 
             return CreateFailureResult(
-                $"Python agent gateway error: {ex.Message}");
+                "Python agent gateway request failed.");
         }
     }
 
@@ -112,8 +111,7 @@ public sealed class PythonAgentGateway(
             {
                 return await CreateHttpFailureResultAsync(
                     response,
-                    "Python agent resume request failed.",
-                    ct);
+                    "Python agent resume request failed.");
             }
 
             var body =
@@ -135,12 +133,12 @@ public sealed class PythonAgentGateway(
         catch (Exception ex)
         {
             logger.LogError(
-                ex,
-                "Python agent resume request failed for correlation {CorrelationId}.",
-                request.CorrelationId);
+                "Python agent resume request failed for correlation {CorrelationId} (error type {ErrorType}).",
+                request.CorrelationId,
+                ex.GetType().Name);
 
             return CreateFailureResult(
-                $"Python agent gateway error: {ex.Message}");
+                "Python agent gateway request failed.");
         }
     }
 
@@ -244,19 +242,12 @@ public sealed class PythonAgentGateway(
             error);
     }
 
-    private static async Task<AgentRunResult> CreateHttpFailureResultAsync(
+    private static Task<AgentRunResult> CreateHttpFailureResultAsync(
         HttpResponseMessage response,
-        string message,
-        CancellationToken ct)
+        string message)
     {
-        var details = await response.Content.ReadAsStringAsync(ct);
-
-        var error =
-            string.IsNullOrWhiteSpace(details)
-                ? $"{message} HTTP {(int)response.StatusCode}."
-                : $"{message} HTTP {(int)response.StatusCode}: {details}";
-
-        return CreateFailureResult(error);
+        return Task.FromResult(CreateFailureResult(
+            $"{message} HTTP {(int)response.StatusCode}."));
     }
 
     private sealed record PythonAgentRunRequest(

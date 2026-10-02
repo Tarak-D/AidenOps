@@ -4,6 +4,7 @@ using System.Text;
 using System.Text.Json;
 using System.Text.RegularExpressions;
 using AIOps.Abstractions.Configuration;
+using AIOps.Abstractions.Diagnostics;
 using AIOps.Abstractions.Integrations;
 using Microsoft.Extensions.Options;
 
@@ -11,9 +12,10 @@ namespace AIOps.Infrastructure.Integrations;
 
 /// <summary>A sanitized, stable Jira Service Management provider failure.</summary>
 public sealed class JiraConnectorException(string category)
-    : InvalidOperationException(JiraConnectorException.GetMessage(category))
+    : InvalidOperationException(JiraConnectorException.GetMessage(category)), IAIOpsSafeTelemetryFailure
 {
     public string Category { get; } = category;
+    public string TelemetryErrorType => Category;
 
     private static string GetMessage(string category) => category switch
     {

@@ -3,6 +3,7 @@ using System.Net.Http.Headers;
 using System.Text;
 using System.Text.Json;
 using AIOps.Abstractions.Configuration;
+using AIOps.Abstractions.Diagnostics;
 using AIOps.Abstractions.Integrations;
 using Microsoft.Extensions.Options;
 
@@ -819,9 +820,11 @@ public enum ThousandEyesError
 
 public sealed class ThousandEyesProviderException(
     ThousandEyesError category,
-    string message) : Exception(message)
+    string message) : Exception(message), IAIOpsSafeTelemetryFailure
 {
     public ThousandEyesError Category { get; } = category;
+
+    public string TelemetryErrorType => Category.ToString();
 
     public string HealthState =>
         Category switch

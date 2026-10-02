@@ -1,5 +1,6 @@
 using System.Text.Json;
 using AIOps.Abstractions.Configuration;
+using AIOps.Abstractions.Diagnostics;
 using AIOps.Abstractions.Integrations;
 using Amazon.EC2;
 using Amazon.EC2.Model;
@@ -36,9 +37,17 @@ public sealed class AwsEc2CloudProvider : ICloudProvider
         }
     }
 
-    public async Task<string> GetInstanceStatusAsync(
+    public Task<string> GetInstanceStatusAsync(
         string instanceId,
-        CancellationToken ct = default)
+        CancellationToken ct = default) =>
+        AIOpsDiagnostics.TrackAsync(
+            "cloud", "AwsEc2", "get_instance_status",
+            () => GetInstanceStatusCoreAsync(instanceId, ct),
+            ct);
+
+    private async Task<string> GetInstanceStatusCoreAsync(
+        string instanceId,
+        CancellationToken ct)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(instanceId);
 
@@ -82,9 +91,17 @@ public sealed class AwsEc2CloudProvider : ICloudProvider
         });
     }
 
-    public async Task<string> RestartInstanceAsync(
+    public Task<string> RestartInstanceAsync(
         string instanceId,
-        CancellationToken ct = default)
+        CancellationToken ct = default) =>
+        AIOpsDiagnostics.TrackAsync(
+            "cloud", "AwsEc2", "restart_instance",
+            () => RestartInstanceCoreAsync(instanceId, ct),
+            ct);
+
+    private async Task<string> RestartInstanceCoreAsync(
+        string instanceId,
+        CancellationToken ct)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(instanceId);
 
@@ -224,7 +241,7 @@ public sealed class AwsEc2CloudProvider : ICloudProvider
 }
 
 /// <summary>A sanitized provider failure suitable for tool and audit output.</summary>
-public sealed class AwsCloudProviderException : Exception
+public sealed class AwsCloudProviderException : Exception, IAIOpsSafeTelemetryFailure
 {
     public AwsCloudProviderException(
         string code,
@@ -236,4 +253,6 @@ public sealed class AwsCloudProviderException : Exception
     }
 
     public string Code { get; }
+
+    public string TelemetryErrorType => Code;
 }

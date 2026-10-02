@@ -1,7 +1,9 @@
+using AIOps.Abstractions.Diagnostics;
+
 namespace AIOps.Infrastructure.Integrations;
 
 /// <summary>A sanitized directory-provider failure safe for tool and audit output.</summary>
-public sealed class DirectoryProviderException : Exception
+public sealed class DirectoryProviderException : Exception, IAIOpsSafeTelemetryFailure
 {
     public DirectoryProviderException(string code, string message)
         : base($"{code}: {message}")
@@ -10,4 +12,6 @@ public sealed class DirectoryProviderException : Exception
     }
 
     public string Code { get; }
+
+    public string TelemetryErrorType => Code;
 }

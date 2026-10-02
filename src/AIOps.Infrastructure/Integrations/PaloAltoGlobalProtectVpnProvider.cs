@@ -1,6 +1,7 @@
 using System.Net;
 using System.Xml.Linq;
 using AIOps.Abstractions.Configuration;
+using AIOps.Abstractions.Diagnostics;
 using AIOps.Abstractions.Integrations;
 using Microsoft.Extensions.Options;
 
@@ -573,10 +574,12 @@ public enum PaloAltoGlobalProtectError
 
 public sealed class PaloAltoGlobalProtectException(
     PaloAltoGlobalProtectError category,
-    string message) : Exception(message)
+    string message) : Exception(message), IAIOpsSafeTelemetryFailure
 {
     public PaloAltoGlobalProtectError Category { get; } =
         category;
+
+    public string TelemetryErrorType => Category.ToString();
 
     public string HealthState =>
         Category switch

@@ -3,6 +3,7 @@ using System.Net.Http.Headers;
 using System.Text;
 using System.Text.Json;
 using AIOps.Abstractions.Configuration;
+using AIOps.Abstractions.Diagnostics;
 using AIOps.Abstractions.Integrations;
 using Microsoft.Extensions.Options;
 
@@ -10,9 +11,10 @@ namespace AIOps.Infrastructure.Integrations;
 
 /// <summary>A sanitized, stable ServiceNow provider failure.</summary>
 public sealed class ServiceNowConnectorException(string category)
-    : InvalidOperationException(ServiceNowConnectorException.GetMessage(category))
+    : InvalidOperationException(ServiceNowConnectorException.GetMessage(category)), IAIOpsSafeTelemetryFailure
 {
     public string Category { get; } = category;
+    public string TelemetryErrorType => Category;
 
     private static string GetMessage(string category) => category switch
     {

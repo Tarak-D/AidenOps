@@ -1,3 +1,4 @@
+using AIOps.Abstractions.Diagnostics;
 using AIOps.Abstractions.Integrations;
 
 namespace AIOps.Infrastructure.Integrations;
@@ -14,8 +15,11 @@ public sealed class SimulatedCloudProvider : ICloudProvider
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(instanceId);
 
-        return Task.FromResult(
-            $$"""{"instanceId":"{{instanceId}}","status":"restarted","provider":"simulated"}""");
+        return AIOpsDiagnostics.TrackAsync(
+            "cloud", "Simulated", "restart_instance",
+            () => Task.FromResult(
+                $$"""{"instanceId":"{{instanceId}}","status":"restarted","provider":"simulated"}"""),
+            ct);
     }
 
     public Task<string> GetInstanceStatusAsync(
@@ -24,7 +28,10 @@ public sealed class SimulatedCloudProvider : ICloudProvider
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(instanceId);
 
-        return Task.FromResult(
-            $$"""{"instanceId":"{{instanceId}}","status":"running","provider":"simulated"}""");
+        return AIOpsDiagnostics.TrackAsync(
+            "cloud", "Simulated", "get_instance_status",
+            () => Task.FromResult(
+                $$"""{"instanceId":"{{instanceId}}","status":"running","provider":"simulated"}"""),
+            ct);
     }
 }

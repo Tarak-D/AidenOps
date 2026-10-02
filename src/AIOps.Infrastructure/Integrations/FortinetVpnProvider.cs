@@ -1,6 +1,7 @@
 using System.Net;
 using System.Text.Json;
 using AIOps.Abstractions.Configuration;
+using AIOps.Abstractions.Diagnostics;
 using AIOps.Abstractions.Integrations;
 using Microsoft.Extensions.Options;
 
@@ -668,9 +669,11 @@ public enum FortinetVpnError
 
 public sealed class FortinetVpnException(
     FortinetVpnError category,
-    string message) : Exception(message)
+    string message) : Exception(message), IAIOpsSafeTelemetryFailure
 {
     public FortinetVpnError Category { get; } = category;
+
+    public string TelemetryErrorType => Category.ToString();
 
     public string HealthState =>
         Category switch

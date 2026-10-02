@@ -4,6 +4,7 @@ using System.Net.Http.Headers;
 using System.Text;
 using System.Text.Json;
 using AIOps.Abstractions.Configuration;
+using AIOps.Abstractions.Diagnostics;
 using AIOps.Abstractions.Integrations;
 using Microsoft.Extensions.Options;
 
@@ -11,9 +12,10 @@ namespace AIOps.Infrastructure.Integrations;
 
 /// <summary>A sanitized, stable Zendesk provider failure.</summary>
 public sealed class ZendeskConnectorException(string category)
-    : InvalidOperationException(ZendeskConnectorException.GetMessage(category))
+    : InvalidOperationException(ZendeskConnectorException.GetMessage(category)), IAIOpsSafeTelemetryFailure
 {
     public string Category { get; } = category;
+    public string TelemetryErrorType => Category;
 
     private static string GetMessage(string category) => category switch
     {

@@ -1,3 +1,5 @@
+using System.Text.Json.Serialization;
+
 namespace AIOps.Abstractions.Configuration;
 
 /// <summary>
@@ -35,6 +37,7 @@ public sealed class NvidiaNimOptions
     public string Model { get; set; } =
         "moonshotai/kimi-k3";
 
+    [JsonIgnore]
     public string ApiKey { get; set; } = "";
 }
 
@@ -112,6 +115,7 @@ public sealed class CiscoSecureAccessOptions
 
     public string? ClientId { get; set; }
 
+    [JsonIgnore]
     public string? ClientSecret { get; set; }
 
     public int TimeoutSeconds { get; set; } = 30;
@@ -125,6 +129,7 @@ public sealed class PaloAltoGlobalProtectOptions
 
     public string? BaseUrl { get; set; }
 
+    [JsonIgnore]
     public string? ApiKey { get; set; }
 
     public int TimeoutSeconds { get; set; } = 30;
@@ -138,6 +143,7 @@ public sealed class FortinetVpnOptions
 
     public string? BaseUrl { get; set; }
 
+    [JsonIgnore]
     public string? ApiToken { get; set; }
 
     public string Vdom { get; set; } = "root";
@@ -158,6 +164,7 @@ public sealed class CiscoThousandEyesOptions
     public string BaseUrl { get; set; } =
         "https://api.thousandeyes.com/v7/";
 
+    [JsonIgnore]
     public string? ApiToken { get; set; }
 
     /// <summary>
@@ -197,6 +204,7 @@ public sealed class ServiceNowItsmOptions
 
     public string? ClientId { get; set; }
 
+    [JsonIgnore]
     public string? ClientSecret { get; set; }
 }
 
@@ -207,6 +215,7 @@ public sealed class JiraServiceManagementItsmOptions
 
     public string? Email { get; set; }
 
+    [JsonIgnore]
     public string? ApiToken { get; set; }
 
     public string? ProjectKey { get; set; }
@@ -232,6 +241,7 @@ public sealed class ZendeskItsmOptions
 
     public string? Email { get; set; }
 
+    [JsonIgnore]
     public string? ApiToken { get; set; }
 
     public int? TimeoutSeconds { get; set; }

@@ -1,3 +1,4 @@
+using AIOps.Abstractions.Diagnostics;
 using AIOps.Abstractions.Integrations;
 
 namespace AIOps.Infrastructure.Integrations;
@@ -14,8 +15,11 @@ public sealed class SimulatedDirectoryService : IDirectoryService
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(userPrincipalName);
 
-        return Task.FromResult(
-            $$"""{"userPrincipalName":"{{userPrincipalName}}","status":"password-reset","provider":"simulated"}""");
+        return AIOpsDiagnostics.TrackAsync(
+            "directory", "Simulated", "reset_password",
+            () => Task.FromResult(
+                $$"""{"userPrincipalName":"{{userPrincipalName}}","status":"password-reset","provider":"simulated"}"""),
+            ct);
     }
 
     public Task<string> GrantGroupAccessAsync(
@@ -26,7 +30,10 @@ public sealed class SimulatedDirectoryService : IDirectoryService
         ArgumentException.ThrowIfNullOrWhiteSpace(userPrincipalName);
         ArgumentException.ThrowIfNullOrWhiteSpace(groupId);
 
-        return Task.FromResult(
-            $$"""{"userPrincipalName":"{{userPrincipalName}}","groupId":"{{groupId}}","status":"access-granted","provider":"simulated"}""");
+        return AIOpsDiagnostics.TrackAsync(
+            "directory", "Simulated", "grant_group_access",
+            () => Task.FromResult(
+                $$"""{"userPrincipalName":"{{userPrincipalName}}","groupId":"{{groupId}}","status":"access-granted","provider":"simulated"}"""),
+            ct);
     }
 }

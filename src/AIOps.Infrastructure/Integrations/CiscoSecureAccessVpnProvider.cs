@@ -3,6 +3,7 @@ using System.Net;
 using System.Net.Http.Headers;
 using System.Text.Json;
 using AIOps.Abstractions.Configuration;
+using AIOps.Abstractions.Diagnostics;
 using AIOps.Abstractions.Integrations;
 using Microsoft.Extensions.Options;
 
@@ -519,7 +520,7 @@ public static class CiscoSecureAccessError
     public const string ProviderFailure = "CiscoSecureAccessProviderFailure";
 }
 
-public sealed class CiscoSecureAccessException : InvalidOperationException
+public sealed class CiscoSecureAccessException : InvalidOperationException, IAIOpsSafeTelemetryFailure
 {
     private static readonly IReadOnlyDictionary<string, string> SafeMessages =
         new Dictionary<string, string>(StringComparer.Ordinal)
@@ -542,4 +543,6 @@ public sealed class CiscoSecureAccessException : InvalidOperationException
     }
 
     public string Category { get; }
+
+    public string TelemetryErrorType => Category;
 }

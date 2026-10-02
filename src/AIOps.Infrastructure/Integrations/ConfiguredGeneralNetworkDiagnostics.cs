@@ -1,4 +1,5 @@
 using AIOps.Abstractions.Integrations;
+using AIOps.Abstractions.Diagnostics;
 
 namespace AIOps.Infrastructure.Integrations;
 
@@ -42,8 +43,11 @@ public sealed class ConfiguredGeneralNetworkDiagnostics(
                 $"No general network diagnostic provider is registered for '{providerName}'.");
         }
 
-        return await provider.RunDiagnosticsAsync(
-            request,
+        return await AIOpsDiagnostics.TrackAsync(
+            NetworkDiagnosticCategories.GeneralNetwork,
+            provider.ProviderName,
+            "run_diagnostics",
+            () => provider.RunDiagnosticsAsync(request, ct),
             ct);
     }
 }
