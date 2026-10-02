@@ -117,7 +117,77 @@ public sealed class CiscoSecureAccessOptions
     public int TimeoutSeconds { get; set; } = 30;
 }
 
+/// <summary>Server-side Palo Alto GlobalProtect VPN API configuration.</summary>
+public sealed class PaloAltoGlobalProtectOptions
+{
+    public const string SectionName =
+        "Integrations:NetworkDiagnostics:PaloAltoGlobalProtect";
+
+    public string? BaseUrl { get; set; }
+
+    public string? ApiKey { get; set; }
+
+    public int TimeoutSeconds { get; set; } = 30;
+}
+
+/// <summary>Server-side Fortinet FortiGate VPN API configuration.</summary>
+public sealed class FortinetVpnOptions
+{
+    public const string SectionName =
+        "Integrations:NetworkDiagnostics:Fortinet";
+
+    public string? BaseUrl { get; set; }
+
+    public string? ApiToken { get; set; }
+
+    public string Vdom { get; set; } = "root";
+
+    public int TimeoutSeconds { get; set; } = 30;
+}
+
 /// <summary>
+/// Server-side Cisco ThousandEyes network diagnostics API configuration.
+/// ApiToken must be supplied through user-secrets, a secret store,
+/// or environment configuration.
+/// </summary>
+public sealed class CiscoThousandEyesOptions
+{
+    public const string SectionName =
+        "Integrations:NetworkDiagnostics:CiscoThousandEyes";
+
+    public string BaseUrl { get; set; } =
+        "https://api.thousandeyes.com/v7/";
+
+    public string? ApiToken { get; set; }
+
+    /// <summary>
+    /// Optional ThousandEyes account-group identifier.
+    /// </summary>
+    public string? AccountGroupId { get; set; }
+
+    /// <summary>
+    /// Server-side ThousandEyes agent ID used for active tests.
+    /// </summary>
+    public string? AgentId { get; set; }
+
+    public int TimeoutSeconds { get; set; } = 30;
+
+    /// <summary>
+    /// Number of bounded result polling attempts after an instant test.
+    /// </summary>
+    public int ResultPollAttempts { get; set; } = 5;
+
+    /// <summary>
+    /// Delay between bounded result polling attempts.
+    /// </summary>
+    public int ResultPollIntervalMilliseconds { get; set; } = 1000;
+}
+
+// ADD THIS BLANK LINE
+
+/// <summary>
+/// Server-side ServiceNow OAuth client configuration. ClientSecret must be supplied
+/// through user-secrets, a secret store, or environment configuration.
 /// Server-side ServiceNow OAuth client configuration. ClientSecret must be supplied
 /// through user-secrets, a secret store, or environment configuration.
 /// </summary>
