@@ -22,13 +22,52 @@ public sealed class EvaluationRunner
         _timeProvider = timeProvider ?? TimeProvider.System;
     }
 
-    public async Task<EvaluationRunSummary> RunAsync(
+    public Task<EvaluationRunSummary> RunAsync(
+        EvaluationDataset dataset,
+        EvaluationRunConfiguration configuration,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(dataset);
+        ArgumentNullException.ThrowIfNull(configuration);
+
+        configuration.Validate();
+
+        return RunAsyncCore(
+            dataset,
+            configuration.ExperimentId,
+            configuration.Model.ModelType,
+            configuration.Model.ModelName,
+            configuration.Model.PromptVersion,
+            configuration,
+            cancellationToken);
+    }
+
+    public Task<EvaluationRunSummary> RunAsync(
         EvaluationDataset dataset,
         string experimentId,
         string modelType,
         string modelName,
         string? promptVersion,
         CancellationToken ct = default)
+    {
+        return RunAsyncCore(
+            dataset,
+            experimentId,
+            modelType,
+            modelName,
+            promptVersion,
+            configuration: null,
+            ct);
+    }
+
+    private async Task<EvaluationRunSummary> RunAsyncCore(
+        EvaluationDataset dataset,
+        string experimentId,
+        string modelType,
+        string modelName,
+        string? promptVersion,
+        EvaluationRunConfiguration? configuration,
+        CancellationToken ct)
     {
         ArgumentNullException.ThrowIfNull(dataset);
 
@@ -79,14 +118,15 @@ public sealed class EvaluationRunner
             Cases = caseResults
         };
 
-        var config = new
-        {
-            dataset.Name,
-            dataset.Version,
-            ExecutionMode = "deterministic-agent-gateway",
-            ExecutionNote =
-                "Approval-required cases are resumed with a synthetic successful tool result. No real external tool is executed by the evaluation runner."
-        };
+        var config = BuildPersistedConfiguration(
+            dataset,
+            modelType,
+            modelName,
+            promptVersion,
+            configuration);
+
+        var notes = configuration?.Notes
+            ?? "Phase 15.1 evaluation foundation.";
 
         var run = new ExperimentRunRecord(
             Guid.NewGuid(),
@@ -101,7 +141,7 @@ public sealed class EvaluationRunner
             startedAt,
             finishedAt,
             JsonSerializer.Serialize(persistedMetrics),
-            "Phase 8 deterministic agent evaluation.");
+            notes);
 
         await _evaluationStore.RecordRunAsync(run, ct);
 
@@ -109,6 +149,51 @@ public sealed class EvaluationRunner
             run,
             caseResults,
             metrics);
+    }
+
+    private static object BuildPersistedConfiguration(
+        EvaluationDataset dataset,
+        string modelType,
+        string modelName,
+        string? promptVersion,
+        EvaluationRunConfiguration? configuration)
+    {
+        if (configuration is null)
+        {
+            return new
+            {
+                dataset.Name,
+                dataset.Version,
+                ExecutionMode = "deterministic-agent-gateway",
+                ExecutionNote =
+                    "Approval-required cases are resumed with a synthetic successful tool result. No real external tool is executed by the evaluation runner."
+            };
+        }
+
+        return new
+        {
+            dataset.Name,
+            dataset.Version,
+            ExecutionMode = configuration.Deterministic
+                ? "deterministic-agent-gateway"
+                : "agent-gateway",
+            Model = new
+            {
+                Type = modelType,
+                Name = modelName,
+                configuration.Model.Provider,
+                configuration.Model.ModelVersion,
+                PromptVersion = promptVersion
+            },
+            configuration.MaxCases,
+            configuration.Deterministic,
+            configuration.ExecuteExternalTools,
+            configuration.Notes,
+            ExecutionNote =
+                configuration.ExecuteExternalTools
+                    ? "External tool execution was enabled by the evaluation configuration."
+                    : "External tool execution was disabled. Approval-required cases are resumed with a synthetic successful tool result."
+        };
     }
 
     private async Task<EvaluationCaseResult> EvaluateCaseAsync(
