@@ -1,6 +1,7 @@
 using AIOps.Abstractions.Audit;
 using AIOps.Abstractions.Evaluation;
 using AIOps.Domain.Entities;
+using AIOps.Infrastructure.Persistence;
 using Microsoft.EntityFrameworkCore;
 using Pgvector.EntityFrameworkCore;
 
@@ -10,23 +11,15 @@ namespace AIOps.Infrastructure.EfCore;
 public sealed class AIOpsDbContext : DbContext
 {
     public AIOpsDbContext(DbContextOptions<AIOpsDbContext> options) : base(options) { }
-
     public DbSet<AuditRecordEntity> AuditRecords { get; set; }
-
     public DbSet<EvaluationRecordEntity> EvaluationRuns { get; set; }
-
+    public DbSet<EvaluationDatasetRecordEntity> EvaluationDatasets { get; set; }
     public DbSet<ActionExecution> ActionExecutions { get; set; }
-
     public DbSet<ApprovalRequest> ApprovalRequests { get; set; }
-
     public DbSet<KnowledgeDocumentEntity> KnowledgeDocuments { get; set; }
-
     public DbSet<KnowledgeChunkEntity> KnowledgeChunks { get; set; }
-
     public DbSet<ItsmProviderSelectionEntity> ItsmProviderSelections { get; set; }
-
     public DbSet<NetworkDiagnosticProviderSelectionEntity> NetworkDiagnosticProviderSelections { get; set; }
-
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
         modelBuilder.HasPostgresExtension("vector");
@@ -70,6 +63,47 @@ public sealed class AIOpsDbContext : DbContext
             entity.HasIndex(e => e.ModelType);
             entity.HasIndex(e => e.StartedAt);
         });
+
+        modelBuilder.Entity<EvaluationDatasetRecordEntity>(entity =>
+{
+    entity.ToTable("evaluation_datasets");
+
+    entity.HasKey(e => e.Id);
+
+    entity.HasIndex(e => new
+    {
+        e.DatasetId,
+        e.Version
+    })
+    .IsUnique();
+
+    entity.Property(e => e.DatasetId)
+        .HasColumnName("dataset_id")
+        .HasMaxLength(100)
+        .IsRequired();
+
+    entity.Property(e => e.Name)
+        .HasColumnName("name")
+        .HasMaxLength(200)
+        .IsRequired();
+
+    entity.Property(e => e.Version)
+        .HasColumnName("version")
+        .HasMaxLength(50)
+        .IsRequired();
+
+    entity.Property(e => e.Description)
+        .HasColumnName("description")
+        .HasMaxLength(2000);
+
+    entity.Property(e => e.CreatedAt)
+        .HasColumnName("created_at")
+        .IsRequired();
+
+    entity.Property(e => e.CasesJson)
+        .HasColumnName("cases_json")
+        .IsRequired();
+});
 
         modelBuilder.Entity<ActionExecution>(entity =>
         {

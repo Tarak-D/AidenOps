@@ -714,6 +714,10 @@ services.Configure<CiscoThousandEyesOptions>(
                 IEvaluationStore,
                 PostgresEvaluationStore>();
 
+                services.AddScoped<
+                IEvaluationDatasetStore,
+                PostgresEvaluationDatasetStore>();
+
             // Phase 7: RAG / knowledge retrieval.
             services.AddScoped<
                 IEmbeddingGenerator,
