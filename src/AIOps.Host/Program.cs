@@ -1,4 +1,5 @@
-﻿using AIOps.Abstractions.Tools;
+﻿using AIOps.Orchestration.Evaluation;
+using AIOps.Abstractions.Tools;
 using AIOps.Tools;
 using AIOps.Host.Api;
 using AIOps.Host.Components;
@@ -58,6 +59,7 @@ builder.Services.AddAIOpsSecurity(
 // --- Platform seams (in-memory dev implementations) ---
 builder.Services.AddAIOpsInfrastructure(
     builder.Configuration);
+builder.Services.AddScoped<LlmEvaluationRunner>();
 
 builder.Services.AddSingleton<ITool, GetInstanceStatusTool>();
 builder.Services.AddSingleton<ITool, RestartInstanceTool>();

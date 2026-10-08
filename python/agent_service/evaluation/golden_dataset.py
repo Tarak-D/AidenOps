@@ -14,6 +14,7 @@ class GoldenDatasetCase:
     title: str
     description: str
     expected_domain: str
+    expected_severity: str | None = None
 
 
 @dataclass(frozen=True)

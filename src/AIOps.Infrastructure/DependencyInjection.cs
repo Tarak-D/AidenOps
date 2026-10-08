@@ -717,7 +717,6 @@ services.Configure<CiscoThousandEyesOptions>(
                 services.AddScoped<
                 IEvaluationDatasetStore,
                 PostgresEvaluationDatasetStore>();
-
             // Phase 7: RAG / knowledge retrieval.
             services.AddScoped<
                 IEmbeddingGenerator,
@@ -810,6 +809,34 @@ services.Configure<CiscoThousandEyesOptions>(
                 IAgentGateway,
                 InProcessFakeAgentGateway>();
         }
+
+services.AddHttpClient<
+    ILlmEvaluationGateway,
+    PythonLlmEvaluationGateway>(
+    (serviceProvider, client) =>
+    {
+        var options =
+            serviceProvider
+                .GetRequiredService<
+                    Microsoft.Extensions.Options.IOptions<AIOptions>>()
+                .Value;
+
+        if (!Uri.TryCreate(
+                options.AgentService.BaseUrl,
+                UriKind.Absolute,
+                out var baseUri))
+        {
+            throw new InvalidOperationException(
+                $"AI:AgentService:BaseUrl is invalid: " +
+                $"{options.AgentService.BaseUrl}");
+        }
+
+        client.BaseAddress = baseUri;
+
+        client.Timeout =
+            TimeSpan.FromSeconds(
+                options.AgentService.TimeoutSeconds);
+    });
 
         return services;
     }

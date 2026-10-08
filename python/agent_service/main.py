@@ -2,6 +2,11 @@ from fastapi import FastAPI
 from pydantic import BaseModel, Field
 import json
 
+from agent_service.evaluation.evaluation_api import (
+    LLMEvaluationRequest,
+    LLMEvaluationService,
+    serialize_llm_evaluation_response,
+)
 from agent_service.graph import build_graph, build_resume_graph
 
 
@@ -105,6 +110,17 @@ def _normalize_api_trace(
 
     return normalized
 
+@app.post(
+    "/api/v1/evaluation/llm",
+)
+async def evaluate_llm(
+    request: LLMEvaluationRequest,
+) -> dict:
+    report = LLMEvaluationService().evaluate(
+        request
+    )
+
+    return serialize_llm_evaluation_response(report)
 
 @app.get(
     "/health",

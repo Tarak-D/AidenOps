@@ -345,6 +345,7 @@ def triage_ticket(
     *,
     title: str | None = None,
     description: str | None = None,
+    provider: str | None = None,
 ) -> tuple[TriageResult, StepTrace]:
     """
     Triage an incident using the configured LLM provider.
@@ -378,9 +379,13 @@ def triage_ticket(
             "An incident, title, or description is required."
         )
 
-    provider = os.getenv(
-        "AGENT_LLM_PROVIDER",
-        "deterministic",
+    provider = (
+        provider
+        if provider is not None
+        else os.getenv(
+            "AGENT_LLM_PROVIDER",
+            "deterministic",
+        )
     ).strip().lower()
 
     if provider == "deterministic":
