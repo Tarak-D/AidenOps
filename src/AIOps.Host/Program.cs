@@ -60,6 +60,8 @@ builder.Services.AddAIOpsSecurity(
 builder.Services.AddAIOpsInfrastructure(
     builder.Configuration);
 builder.Services.AddScoped<LlmEvaluationRunner>();
+builder.Services.AddScoped<RetrievalEvaluationRunner>();
+builder.Services.AddScoped<EvaluationComparisonService>();
 
 builder.Services.AddSingleton<ITool, GetInstanceStatusTool>();
 builder.Services.AddSingleton<ITool, RestartInstanceTool>();
@@ -176,6 +178,7 @@ app.MapGet(
 app.MapTicketApi();
 app.MapKnowledgeApi();
 app.MapCloudIntegrationApi();
+app.MapEvaluationApi();
 app.MapItsmIntegrationApi();
 app.MapNetworkDiagnosticIntegrationApi();
 

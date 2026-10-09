@@ -1,3 +1,4 @@
+
 using AIOps.Abstractions.Evaluation;
 using AIOps.Contracts.AgentGateway;
 using AIOps.Domain;
@@ -12,32 +13,38 @@ public sealed class EvaluationMetricsTests
         var results = new[]
         {
             CreateResult(
-                "resolved",
-                TicketDomain.Network,
-                Severity.P1,
+                id: "resolved",
+                domain: TicketDomain.Network,
+                severity: Severity.P1,
                 domainCorrect: true,
                 severityCorrect: true,
+                decisionCorrect: true,
                 approvalRequired: false,
+                expectedApprovalRequired: false,
                 executionSucceeded: true,
                 finalOutcome: AgentRunOutcome.Resolved),
 
             CreateResult(
-                "approval",
-                TicketDomain.Infrastructure,
-                Severity.P1,
+                id: "approval",
+                domain: TicketDomain.Infrastructure,
+                severity: Severity.P1,
                 domainCorrect: true,
                 severityCorrect: true,
+                decisionCorrect: true,
                 approvalRequired: true,
+                expectedApprovalRequired: true,
                 executionSucceeded: true,
                 finalOutcome: AgentRunOutcome.Resolved),
 
             CreateResult(
-                "escalated",
-                TicketDomain.Database,
-                Severity.P1,
+                id: "escalated",
+                domain: TicketDomain.Database,
+                severity: Severity.P1,
                 domainCorrect: true,
                 severityCorrect: true,
+                decisionCorrect: true,
                 approvalRequired: false,
+                expectedApprovalRequired: false,
                 executionSucceeded: null,
                 finalOutcome: AgentRunOutcome.Escalated)
         };
@@ -46,14 +53,53 @@ public sealed class EvaluationMetricsTests
 
         Assert.Equal(3, metrics.SampleCount);
         Assert.Equal(1.0, metrics.TriageAccuracy);
+        Assert.Equal(1.0, metrics.DecisionAccuracy);
         Assert.Equal(1.0, metrics.DomainClassificationAccuracy);
         Assert.Equal(1.0, metrics.SeverityClassificationAccuracy);
         Assert.Equal(1.0, metrics.ToolSelectionAccuracy);
         Assert.Equal(1.0, metrics.ToolArgumentValidity);
         Assert.Equal(1.0 / 3.0, metrics.ApprovalRate);
+        Assert.Equal(1.0, metrics.ApprovalPolicyAccuracy);
         Assert.Equal(1.0, metrics.ExecutionSuccessRate);
         Assert.Equal(2.0 / 3.0, metrics.ResolutionRate);
         Assert.Equal(1.0 / 3.0, metrics.EscalationRate);
+    }
+
+    [Fact]
+    public void Calculate_detects_approval_policy_mismatch()
+    {
+        var results = new[]
+        {
+            CreateResult(
+                id: "correct",
+                domain: TicketDomain.Infrastructure,
+                severity: Severity.P1,
+                domainCorrect: true,
+                severityCorrect: true,
+                decisionCorrect: true,
+                approvalRequired: true,
+                expectedApprovalRequired: true,
+                executionSucceeded: true,
+                finalOutcome: AgentRunOutcome.Resolved),
+
+            CreateResult(
+                id: "incorrect",
+                domain: TicketDomain.Network,
+                severity: Severity.P1,
+                domainCorrect: true,
+                severityCorrect: true,
+                decisionCorrect: false,
+                approvalRequired: true,
+                expectedApprovalRequired: false,
+                executionSucceeded: true,
+                finalOutcome: AgentRunOutcome.Resolved)
+        };
+
+        var metrics = EvaluationMetrics.Calculate(results);
+
+        Assert.Equal(1.0, metrics.ApprovalRate);
+        Assert.Equal(0.5, metrics.ApprovalPolicyAccuracy);
+        Assert.Equal(0.5, metrics.DecisionAccuracy);
     }
 
     private static EvaluationCaseResult CreateResult(
@@ -62,7 +108,9 @@ public sealed class EvaluationMetricsTests
         Severity severity,
         bool domainCorrect,
         bool severityCorrect,
+        bool decisionCorrect,
         bool approvalRequired,
+        bool expectedApprovalRequired,
         bool? executionSucceeded,
         AgentRunOutcome finalOutcome)
     {
@@ -88,8 +136,11 @@ public sealed class EvaluationMetricsTests
             true,
             true,
             initialOutcome,
+            decisionCorrect,
             finalOutcome,
+            expectedApprovalRequired,
             approvalRequired,
+            approvalRequired == expectedApprovalRequired,
             executionSucceeded,
             finalOutcome == AgentRunOutcome.Resolved,
             finalOutcome == AgentRunOutcome.Escalated,

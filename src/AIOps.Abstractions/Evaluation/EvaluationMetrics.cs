@@ -1,3 +1,4 @@
+
 using AIOps.Contracts.AgentGateway;
 using AIOps.Domain;
 
@@ -19,8 +20,11 @@ public sealed record EvaluationCaseResult(
     bool ToolSelectionCorrect,
     bool? ToolArgumentsValid,
     AgentRunOutcome InitialOutcome,
+    bool DecisionCorrect,
     AgentRunOutcome FinalOutcome,
+    bool ExpectedApprovalRequired,
     bool ApprovalRequired,
+    bool ApprovalPolicyCorrect,
     bool? ExecutionSucceeded,
     bool Resolved,
     bool Escalated,
@@ -33,11 +37,13 @@ public sealed record EvaluationCaseResult(
 public sealed record EvaluationMetrics(
     int SampleCount,
     double TriageAccuracy,
+    double DecisionAccuracy,
     double DomainClassificationAccuracy,
     double SeverityClassificationAccuracy,
     double ToolSelectionAccuracy,
     double? ToolArgumentValidity,
     double ApprovalRate,
+    double ApprovalPolicyAccuracy,
     double? ExecutionSuccessRate,
     double ResolutionRate,
     double EscalationRate,
@@ -50,6 +56,8 @@ public sealed record EvaluationMetrics(
     public static EvaluationMetrics Calculate(
         IReadOnlyList<EvaluationCaseResult> results)
     {
+        ArgumentNullException.ThrowIfNull(results);
+
         if (results.Count == 0)
         {
             return new EvaluationMetrics(
@@ -58,7 +66,9 @@ public sealed record EvaluationMetrics(
                 0,
                 0,
                 0,
+                0,
                 null,
+                0,
                 0,
                 null,
                 0,
@@ -81,6 +91,9 @@ public sealed record EvaluationMetrics(
         var triageAccuracy =
             results.Count(r => r.TriageCorrect) / (double)sampleCount;
 
+        var decisionAccuracy =
+            results.Count(r => r.DecisionCorrect) / (double)sampleCount;
+
         var toolSelectionAccuracy =
             results.Count(r => r.ToolSelectionCorrect) / (double)sampleCount;
 
@@ -89,20 +102,23 @@ public sealed record EvaluationMetrics(
             .Select(r => r.ToolArgumentsValid!.Value)
             .ToArray();
 
-        var toolArgumentValidity = argumentResults.Length == 0
-            ? (double?)null
+        double? toolArgumentValidity = argumentResults.Length == 0
+            ? null
             : argumentResults.Count(v => v) / (double)argumentResults.Length;
 
         var approvalRate =
             results.Count(r => r.ApprovalRequired) / (double)sampleCount;
+
+        var approvalPolicyAccuracy =
+            results.Count(r => r.ApprovalPolicyCorrect) / (double)sampleCount;
 
         var executionResults = results
             .Where(r => r.ExecutionSucceeded.HasValue)
             .Select(r => r.ExecutionSucceeded!.Value)
             .ToArray();
 
-        var executionSuccessRate = executionResults.Length == 0
-            ? (double?)null
+        double? executionSuccessRate = executionResults.Length == 0
+            ? null
             : executionResults.Count(v => v) / (double)executionResults.Length;
 
         var resolutionRate =
@@ -118,18 +134,20 @@ public sealed record EvaluationMetrics(
             .Select(r => r.RetrievalRelevance!.Value)
             .ToArray();
 
-        var retrievalRelevance = retrievalResults.Length == 0
-            ? (double?)null
+        double? retrievalRelevance = retrievalResults.Length == 0
+            ? null
             : retrievalResults.Average();
 
         return new EvaluationMetrics(
             sampleCount,
             triageAccuracy,
+            decisionAccuracy,
             domainAccuracy,
             severityAccuracy,
             toolSelectionAccuracy,
             toolArgumentValidity,
             approvalRate,
+            approvalPolicyAccuracy,
             executionSuccessRate,
             resolutionRate,
             escalationRate,

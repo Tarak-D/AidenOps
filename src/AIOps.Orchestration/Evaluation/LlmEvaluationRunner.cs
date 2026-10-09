@@ -124,8 +124,11 @@ public sealed class LlmEvaluationRunner
                 Type = response.ModelType,
                 Provider = response.Model.Provider,
                 Name = response.Model.Name,
-                PromptVersion = response.Model.PromptVersion
-            },
+                ModelVersion = configuration.Model.ModelVersion,
+                PromptVersion = string.IsNullOrWhiteSpace(response.Model.PromptVersion)
+                ? configuration.Model.PromptVersion
+                : response.Model.PromptVersion
+                },
             configuration.MaxCases,
             configuration.Deterministic,
             configuration.ExecuteExternalTools,

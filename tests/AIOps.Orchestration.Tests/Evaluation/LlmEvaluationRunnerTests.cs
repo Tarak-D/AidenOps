@@ -1,3 +1,4 @@
+using System.Text.Json;
 using AIOps.Abstractions.Evaluation;
 using AIOps.Contracts.Evaluation;
 using AIOps.Orchestration.Evaluation;
@@ -9,175 +10,178 @@ public sealed class LlmEvaluationRunnerTests
     [Fact]
     public async Task RunAsync_Persists_llm_experiment_run()
     {
-        var gateway =
-            new FakeLlmEvaluationGateway();
+        var gateway = new FakeLlmEvaluationGateway();
+        var store = new FakeEvaluationStore();
+        var runner = new LlmEvaluationRunner(gateway, store);
+        var dataset = CreateDataset();
 
-        var store =
-            new FakeEvaluationStore();
+        var configuration = new EvaluationRunConfiguration(
+            "experiment-llm-001",
+            new EvaluationModelMetadata(
+                "llm",
+                "test-model",
+                Provider: "nvidia",
+                ModelVersion: "model-version-2026-01",
+                PromptVersion: "v1"),
+            dataset.Name,
+            dataset.Version);
 
-        var runner =
-            new LlmEvaluationRunner(
-                gateway,
-                store);
-
-        var dataset =
-            CreateDataset();
-
-        var configuration =
-            new EvaluationRunConfiguration(
-                "experiment-llm-001",
-                new EvaluationModelMetadata(
-                    "llm",
-                    "test-model",
-                    Provider: "nvidia",
-                    PromptVersion: "v1"),
-                dataset.Name,
-                dataset.Version);
-
-        var run =
-            await runner.RunAsync(
-                "dataset-001",
-                dataset,
-                configuration);
+        var run = await runner.RunAsync(
+            "dataset-001",
+            dataset,
+            configuration);
 
         Assert.NotEqual(Guid.Empty, run.Id);
-        Assert.Equal(
-            "experiment-llm-001",
-            run.ExperimentId);
-        Assert.Equal(
-            "llm",
-            run.ModelType);
-        Assert.Equal(
-            "test-model",
-            run.ModelName);
-        Assert.Equal(
-            "golden",
-            run.DatasetName);
-        Assert.Equal(
-            "1.0",
-            run.DatasetVersion);
-        Assert.Equal(
-            1,
-            run.SampleCount);
-
+        Assert.Equal("experiment-llm-001", run.ExperimentId);
+        Assert.Equal("llm", run.ModelType);
+        Assert.Equal("test-model", run.ModelName);
+        Assert.Equal("golden", run.DatasetName);
+        Assert.Equal("1.0", run.DatasetVersion);
+        Assert.Equal(1, run.SampleCount);
         Assert.Single(store.Runs);
 
-        Assert.Contains(
-            "\"DatasetId\":\"dataset-001\"",
-            run.ConfigJson);
+        using var configDocument = JsonDocument.Parse(run.ConfigJson);
+        var model = configDocument.RootElement.GetProperty("Model");
 
-        Assert.Contains(
-            "\"TriageAccuracy\":1",
-            run.MetricsJson);
+        Assert.Equal(
+            "model-version-2026-01",
+            model.GetProperty("ModelVersion").GetString());
+
+        Assert.Equal("nvidia", model.GetProperty("Provider").GetString());
+        Assert.Equal("test-model", model.GetProperty("Name").GetString());
+        Assert.Equal("v1", model.GetProperty("PromptVersion").GetString());
+
+        using var metricsDocument = JsonDocument.Parse(run.MetricsJson);
+        var metrics = metricsDocument.RootElement;
+
+        Assert.Equal(1, metrics.GetProperty("TriageAccuracy").GetDouble());
+        Assert.Equal(25, metrics.GetProperty("AverageLatencyMs").GetDouble());
+        Assert.Equal(25, metrics.GetProperty("TotalLatencyMs").GetDouble());
+        Assert.Equal(40, metrics.GetProperty("PromptTokens").GetInt32());
+        Assert.Equal(15, metrics.GetProperty("CompletionTokens").GetInt32());
+        Assert.Equal(55, metrics.GetProperty("TotalTokens").GetInt32());
     }
 
     [Fact]
     public async Task RunAsync_MaxCases_limits_submitted_cases()
     {
-        var gateway =
-            new FakeLlmEvaluationGateway();
+        var gateway = new FakeLlmEvaluationGateway();
+        var store = new FakeEvaluationStore();
+        var runner = new LlmEvaluationRunner(gateway, store);
 
-        var store =
-            new FakeEvaluationStore();
+        var dataset = new EvaluationDataset(
+            "golden",
+            "1.0",
+            [
+                CreateCase("case-1"),
+                CreateCase("case-2"),
+                CreateCase("case-3")
+            ]);
 
-        var runner =
-            new LlmEvaluationRunner(
-                gateway,
-                store);
+        var configuration = new EvaluationRunConfiguration(
+            "experiment-llm-002",
+            new EvaluationModelMetadata(
+                "llm",
+                "test-model",
+                Provider: "openrouter",
+                PromptVersion: "v2"),
+            dataset.Name,
+            dataset.Version,
+            MaxCases: 2);
 
-        var dataset =
-            new EvaluationDataset(
-                "golden",
-                "1.0",
-                [
-                    CreateCase("case-1"),
-                    CreateCase("case-2"),
-                    CreateCase("case-3")
-                ]);
-
-        var configuration =
-            new EvaluationRunConfiguration(
-                "experiment-llm-002",
-                new EvaluationModelMetadata(
-                    "llm",
-                    "test-model",
-                    Provider: "openrouter",
-                    PromptVersion: "v2"),
-                dataset.Name,
-                dataset.Version,
-                MaxCases: 2);
-
-        var run =
-            await runner.RunAsync(
-                "dataset-002",
-                dataset,
-                configuration);
+        var run = await runner.RunAsync(
+            "dataset-002",
+            dataset,
+            configuration);
 
         Assert.Equal(2, run.SampleCount);
         Assert.Equal(2, gateway.LastRequest!.Cases.Count);
-        Assert.Equal(
-            "case-1",
-            gateway.LastRequest.Cases[0].CaseId);
-        Assert.Equal(
-            "case-2",
-            gateway.LastRequest.Cases[1].CaseId);
+        Assert.Equal("case-1", gateway.LastRequest.Cases[0].CaseId);
+        Assert.Equal("case-2", gateway.LastRequest.Cases[1].CaseId);
     }
 
     [Fact]
     public async Task RunAsync_rejects_non_llm_model()
     {
-        var runner =
-            new LlmEvaluationRunner(
-                new FakeLlmEvaluationGateway(),
-                new FakeEvaluationStore());
+        var runner = new LlmEvaluationRunner(
+            new FakeLlmEvaluationGateway(),
+            new FakeEvaluationStore());
 
-        var dataset =
-            CreateDataset();
+        var dataset = CreateDataset();
 
-        var configuration =
-            new EvaluationRunConfiguration(
-                "experiment-classical",
-                new EvaluationModelMetadata(
-                    "classical_ml",
-                    "tfidf-logreg-v1"),
-                dataset.Name,
-                dataset.Version);
+        var configuration = new EvaluationRunConfiguration(
+            "experiment-classical",
+            new EvaluationModelMetadata(
+                "classical_ml",
+                "tfidf-logreg-v1"),
+            dataset.Name,
+            dataset.Version);
 
         await Assert.ThrowsAsync<ArgumentException>(
-            () =>
-                runner.RunAsync(
-                    "dataset-003",
-                    dataset,
-                    configuration));
+            () => runner.RunAsync(
+                "dataset-003",
+                dataset,
+                configuration));
     }
 
     [Fact]
     public async Task RunAsync_rejects_mismatched_dataset_version()
     {
-        var runner =
-            new LlmEvaluationRunner(
-                new FakeLlmEvaluationGateway(),
-                new FakeEvaluationStore());
+        var runner = new LlmEvaluationRunner(
+            new FakeLlmEvaluationGateway(),
+            new FakeEvaluationStore());
 
-        var dataset =
-            CreateDataset();
+        var dataset = CreateDataset();
 
-        var configuration =
-            new EvaluationRunConfiguration(
-                "experiment-llm-003",
-                new EvaluationModelMetadata(
-                    "llm",
-                    "test-model",
-                    Provider: "nvidia"),
-                dataset.Name,
-                "999.0");
+        var configuration = new EvaluationRunConfiguration(
+            "experiment-llm-003",
+            new EvaluationModelMetadata(
+                "llm",
+                "test-model",
+                Provider: "nvidia"),
+            dataset.Name,
+            "999.0");
 
         await Assert.ThrowsAsync<ArgumentException>(
-            () =>
-                runner.RunAsync(
-                    "dataset-004",
-                    dataset,
-                    configuration));
+            () => runner.RunAsync(
+                "dataset-004",
+                dataset,
+                configuration));
+    }
+
+    [Fact]
+    public async Task RunAsync_uses_configured_prompt_version_when_response_version_is_empty()
+    {
+        var gateway = new FakeLlmEvaluationGateway(
+            responsePromptVersion: "");
+        var store = new FakeEvaluationStore();
+        var runner = new LlmEvaluationRunner(gateway, store);
+        var dataset = CreateDataset();
+
+        var configuration = new EvaluationRunConfiguration(
+            "experiment-llm-prompt-fallback",
+            new EvaluationModelMetadata(
+                "llm",
+                "test-model",
+                Provider: "nvidia",
+                ModelVersion: "model-version-1",
+                PromptVersion: "configured-prompt-v2"),
+            dataset.Name,
+            dataset.Version);
+
+        var run = await runner.RunAsync(
+            "dataset-prompt-fallback",
+            dataset,
+            configuration);
+
+        Assert.Equal("configured-prompt-v2", run.PromptVersion);
+
+        using var document = JsonDocument.Parse(run.ConfigJson);
+        var model = document.RootElement.GetProperty("Model");
+
+        Assert.Equal(
+            "configured-prompt-v2",
+            model.GetProperty("PromptVersion").GetString());
     }
 
     private static EvaluationDataset CreateDataset()
@@ -185,13 +189,10 @@ public sealed class LlmEvaluationRunnerTests
         return new EvaluationDataset(
             "golden",
             "1.0",
-            [
-                CreateCase("case-1")
-            ]);
+            [CreateCase("case-1")]);
     }
 
-    private static EvaluationCase CreateCase(
-        string id)
+    private static EvaluationCase CreateCase(string id)
     {
         var ticket =
             new AIOps.Contracts.AgentGateway.AgentTicketContext(
@@ -216,9 +217,15 @@ public sealed class LlmEvaluationRunnerTests
             false);
     }
 
-    private sealed class FakeLlmEvaluationGateway
-        : ILlmEvaluationGateway
+    private sealed class FakeLlmEvaluationGateway : ILlmEvaluationGateway
     {
+        private readonly string _responsePromptVersion;
+
+        public FakeLlmEvaluationGateway(string responsePromptVersion = "v1")
+        {
+            _responsePromptVersion = responsePromptVersion;
+        }
+
         public LlmEvaluationRequest? LastRequest { get; private set; }
 
         public Task<LlmEvaluationResponse> EvaluateAsync(
@@ -227,56 +234,52 @@ public sealed class LlmEvaluationRunnerTests
         {
             LastRequest = request;
 
-            var predictions =
-                request.Cases
-                    .Select(c =>
-                        new LlmEvaluationPredictionResponse(
-                            c.CaseId,
-                            request.Provider,
-                            "test-model",
-                            "v1",
-                            c.ExpectedDomain,
-                            c.ExpectedSeverity,
-                            0.95,
-                            true,
-                            true,
-                            true,
-                            40,
-                            15,
-                            55,
-                            25))
-                    .ToArray();
+            var predictions = request.Cases
+                .Select(c => new LlmEvaluationPredictionResponse(
+                    c.CaseId,
+                    request.Provider,
+                    "test-model",
+                    _responsePromptVersion,
+                    c.ExpectedDomain,
+                    c.ExpectedSeverity,
+                    0.95,
+                    true,
+                    true,
+                    true,
+                    40,
+                    15,
+                    55,
+                    25))
+                .ToArray();
 
-            var response =
-                new LlmEvaluationResponse(
-                    "llm",
-                    new LlmEvaluationDatasetResponse(
-                        request.DatasetId,
-                        request.DatasetName,
-                        request.DatasetVersion),
-                    new LlmEvaluationModelResponse(
-                        request.Provider,
-                        "test-model",
-                        "v1"),
-                    predictions.Length,
-                    new LlmEvaluationMetricsResponse(
-                        1.0,
-                        1.0,
-                        1.0,
-                        0.95,
-                        predictions.Length * 25.0,
-                        25.0,
-                        predictions.Length * 40,
-                        predictions.Length * 15,
-                        predictions.Length * 55),
-                    predictions);
+            var response = new LlmEvaluationResponse(
+                "llm",
+                new LlmEvaluationDatasetResponse(
+                    request.DatasetId,
+                    request.DatasetName,
+                    request.DatasetVersion),
+                new LlmEvaluationModelResponse(
+                    request.Provider,
+                    "test-model",
+                    _responsePromptVersion),
+                predictions.Length,
+                new LlmEvaluationMetricsResponse(
+                    1.0,
+                    1.0,
+                    1.0,
+                    0.95,
+                    predictions.Length * 25.0,
+                    25.0,
+                    predictions.Length * 40,
+                    predictions.Length * 15,
+                    predictions.Length * 55),
+                predictions);
 
             return Task.FromResult(response);
         }
     }
 
-    private sealed class FakeEvaluationStore
-        : IEvaluationStore
+    private sealed class FakeEvaluationStore : IEvaluationStore
     {
         public List<ExperimentRunRecord> Runs { get; } = [];
 
@@ -293,15 +296,14 @@ public sealed class LlmEvaluationRunnerTests
             string? datasetName = null,
             CancellationToken ct = default)
         {
-            IReadOnlyList<ExperimentRunRecord> result =
-                Runs
-                    .Where(r =>
-                        experimentId is null ||
-                        r.ExperimentId == experimentId)
-                    .Where(r =>
-                        datasetName is null ||
-                        r.DatasetName == datasetName)
-                    .ToArray();
+            IReadOnlyList<ExperimentRunRecord> result = Runs
+                .Where(r =>
+                    experimentId is null ||
+                    r.ExperimentId == experimentId)
+                .Where(r =>
+                    datasetName is null ||
+                    r.DatasetName == datasetName)
+                .ToArray();
 
             return Task.FromResult(result);
         }

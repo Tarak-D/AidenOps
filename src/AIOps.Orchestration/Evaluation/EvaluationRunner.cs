@@ -1,3 +1,4 @@
+
 using System.Diagnostics;
 using System.Text.Json;
 using AIOps.Abstractions.Agents;
@@ -102,11 +103,13 @@ public sealed class EvaluationRunner
         {
             metrics.SampleCount,
             metrics.TriageAccuracy,
+            metrics.DecisionAccuracy,
             metrics.DomainClassificationAccuracy,
             metrics.SeverityClassificationAccuracy,
             metrics.ToolSelectionAccuracy,
             metrics.ToolArgumentValidity,
             metrics.ApprovalRate,
+            metrics.ApprovalPolicyAccuracy,
             metrics.ExecutionSuccessRate,
             metrics.ResolutionRate,
             metrics.EscalationRate,
@@ -211,15 +214,14 @@ public sealed class EvaluationRunner
 
         var stopwatch = Stopwatch.StartNew();
 
-        var initialResult =
-            await _agentGateway.StartRunAsync(
-                request,
-                ct);
+        var initialResult = await _agentGateway.StartRunAsync(
+            request,
+            ct);
 
         AgentRunResult finalResult = initialResult;
 
         bool? executionSucceeded = initialResult.Proposal is null
-            ? (bool?)null
+            ? null
             : initialResult.Outcome == AgentRunOutcome.Resolved;
 
         if (initialResult.Outcome == AgentRunOutcome.AwaitingApproval)
@@ -232,10 +234,9 @@ public sealed class EvaluationRunner
                 ToolResultJson: "{}",
                 ToolExecutionSucceeded: true);
 
-            finalResult =
-                await _agentGateway.ResumeRunAsync(
-                    resumeRequest,
-                    ct);
+            finalResult = await _agentGateway.ResumeRunAsync(
+                resumeRequest,
+                ct);
 
             executionSucceeded =
                 finalResult.Outcome == AgentRunOutcome.Resolved;
@@ -256,19 +257,26 @@ public sealed class EvaluationRunner
         var triageCorrect =
             domainCorrect && severityCorrect;
 
-        var toolSelectionCorrect =
-            string.Equals(
-                predictedTool,
-                evaluationCase.ExpectedToolName,
-                StringComparison.Ordinal);
+        var decisionCorrect =
+            initialResult.Outcome == evaluationCase.ExpectedInitialOutcome;
+
+        var toolSelectionCorrect = string.Equals(
+            predictedTool,
+            evaluationCase.ExpectedToolName,
+            StringComparison.Ordinal);
+
+        var approvalRequired =
+            initialResult.Outcome == AgentRunOutcome.AwaitingApproval;
+
+        var approvalPolicyCorrect =
+            approvalRequired == evaluationCase.ExpectedApprovalRequired;
 
         bool? toolArgumentsValid = null;
 
         if (initialResult.Proposal is not null)
         {
-            toolArgumentsValid =
-                IsValidJsonObject(
-                    initialResult.Proposal.ArgumentsJson);
+            toolArgumentsValid = IsValidJsonObject(
+                initialResult.Proposal.ArgumentsJson);
         }
 
         var trace = initialResult.Trace
@@ -291,8 +299,11 @@ public sealed class EvaluationRunner
             toolSelectionCorrect,
             toolArgumentsValid,
             initialResult.Outcome,
+            decisionCorrect,
             finalResult.Outcome,
-            initialResult.Outcome == AgentRunOutcome.AwaitingApproval,
+            evaluationCase.ExpectedApprovalRequired,
+            approvalRequired,
+            approvalPolicyCorrect,
             executionSucceeded,
             finalResult.Outcome == AgentRunOutcome.Resolved,
             finalResult.Outcome == AgentRunOutcome.Escalated,
