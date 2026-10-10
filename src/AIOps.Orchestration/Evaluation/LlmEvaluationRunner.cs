@@ -6,6 +6,8 @@ namespace AIOps.Orchestration.Evaluation;
 
 public sealed class LlmEvaluationRunner
 {
+    private const decimal TokensPerMillion = 1_000_000m;
+
     private readonly ILlmEvaluationGateway _gateway;
     private readonly IEvaluationStore _evaluationStore;
     private readonly TimeProvider _timeProvider;
@@ -77,18 +79,15 @@ public sealed class LlmEvaluationRunner
                 ? dataset.Cases.Take(maxCases).ToArray()
                 : dataset.Cases.ToArray();
 
-        var requestCases =
-            selectedCases
-                .Select(evaluationCase =>
-                {
-                    return new LlmEvaluationCaseRequest(
-                        evaluationCase.Id,
-                        evaluationCase.Ticket.Title,
-                        evaluationCase.Ticket.Description,
-                        evaluationCase.ExpectedDomain.ToString(),
-                        evaluationCase.ExpectedSeverity.ToString());
-                })
-                .ToArray();
+        var requestCases = selectedCases
+            .Select(evaluationCase =>
+                new LlmEvaluationCaseRequest(
+                    evaluationCase.Id,
+                    evaluationCase.Ticket.Title,
+                    evaluationCase.Ticket.Description,
+                    evaluationCase.ExpectedDomain.ToString(),
+                    evaluationCase.ExpectedSeverity.ToString()))
+            .ToArray();
 
         var request = new LlmEvaluationRequest(
             datasetId,
@@ -102,17 +101,24 @@ public sealed class LlmEvaluationRunner
 
         var startedAt = _timeProvider.GetUtcNow();
 
-        var response =
-            await _gateway.EvaluateAsync(
-                request,
-                cancellationToken);
+        var response = await _gateway.EvaluateAsync(
+            request,
+            cancellationToken);
 
         var finishedAt = _timeProvider.GetUtcNow();
 
-        ValidateResponse(
-            response,
-            request,
-            configuration);
+        ValidateResponse(response, request, configuration);
+
+        var inputPrice = configuration.Model.InputPricePerMillionTokens;
+        var outputPrice = configuration.Model.OutputPricePerMillionTokens;
+
+        decimal? estimatedCost = inputPrice.HasValue && outputPrice.HasValue
+            ? CalculateEstimatedCost(
+                response.Metrics.PromptTokens,
+                response.Metrics.CompletionTokens,
+                inputPrice.Value,
+                outputPrice.Value)
+            : null;
 
         var persistedConfiguration = new
         {
@@ -125,10 +131,19 @@ public sealed class LlmEvaluationRunner
                 Provider = response.Model.Provider,
                 Name = response.Model.Name,
                 ModelVersion = configuration.Model.ModelVersion,
-                PromptVersion = string.IsNullOrWhiteSpace(response.Model.PromptVersion)
-                ? configuration.Model.PromptVersion
-                : response.Model.PromptVersion
-                },
+                PromptVersion = string.IsNullOrWhiteSpace(
+                    response.Model.PromptVersion)
+                    ? configuration.Model.PromptVersion
+                    : response.Model.PromptVersion
+            },
+            Pricing = inputPrice.HasValue && outputPrice.HasValue
+                ? new
+                {
+                    Currency = "USD",
+                    InputPricePerMillionTokens = inputPrice,
+                    OutputPricePerMillionTokens = outputPrice
+                }
+                : null,
             configuration.MaxCases,
             configuration.Deterministic,
             configuration.ExecuteExternalTools,
@@ -148,6 +163,8 @@ public sealed class LlmEvaluationRunner
             response.Metrics.PromptTokens,
             response.Metrics.CompletionTokens,
             response.Metrics.TotalTokens,
+            EstimatedCost = estimatedCost,
+            CostCurrency = estimatedCost.HasValue ? "USD" : null,
             Predictions = response.Predictions
         };
 
@@ -174,6 +191,40 @@ public sealed class LlmEvaluationRunner
             cancellationToken);
 
         return run;
+    }
+
+    private static decimal CalculateEstimatedCost(
+        int promptTokens,
+        int completionTokens,
+        decimal inputPricePerMillionTokens,
+        decimal outputPricePerMillionTokens)
+    {
+        if (promptTokens < 0)
+        {
+            throw new ArgumentOutOfRangeException(nameof(promptTokens));
+        }
+
+        if (completionTokens < 0)
+        {
+            throw new ArgumentOutOfRangeException(nameof(completionTokens));
+        }
+
+        if (inputPricePerMillionTokens < 0)
+        {
+            throw new ArgumentOutOfRangeException(
+                nameof(inputPricePerMillionTokens));
+        }
+
+        if (outputPricePerMillionTokens < 0)
+        {
+            throw new ArgumentOutOfRangeException(
+                nameof(outputPricePerMillionTokens));
+        }
+
+        return (
+            promptTokens * inputPricePerMillionTokens
+            + completionTokens * outputPricePerMillionTokens
+        ) / TokensPerMillion;
     }
 
     private static void ValidateResponse(

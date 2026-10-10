@@ -373,6 +373,62 @@ public sealed class EvaluationComparisonServiceTests
         Assert.Equal(EvaluationMetricTrend.Improved, metric.Trend);
     }
 
+    [Fact]
+    public async Task CompareAsync_classifies_retrieval_metric_trends_correctly()
+    {
+        var store = new Mock<IEvaluationStore>();
+        var startedAt = DateTimeOffset.UtcNow;
+
+        store.Setup(s => s.ListRunsAsync(
+                null,
+                null,
+                It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new[]
+            {
+                CreateRun(
+                    "experiment-retrieval",
+                    "model-a",
+                    "golden",
+                    "v1",
+                    """{"Hit@5":0.6,"MRR":0.5,"AverageFirstRelevantRank":3.0}""",
+                    startedAt: startedAt),
+
+                CreateRun(
+                    "experiment-retrieval",
+                    "model-b",
+                    "golden",
+                    "v1",
+                    """{"Hit@5":0.8,"MRR":0.7,"AverageFirstRelevantRank":2.0}""",
+                    startedAt: startedAt.AddMinutes(1))
+            });
+
+        var service = new EvaluationComparisonService(store.Object);
+
+        var report = await service.CompareAsync();
+        var comparison = Assert.Single(
+            Assert.Single(report.Datasets).Comparisons);
+
+        Assert.Equal(3, comparison.Metrics.Count);
+
+        Assert.Equal(
+            EvaluationMetricTrend.Improved,
+            Assert.Single(
+                comparison.Metrics,
+                m => m.MetricName == "Hit@5").Trend);
+
+        Assert.Equal(
+            EvaluationMetricTrend.Improved,
+            Assert.Single(
+                comparison.Metrics,
+                m => m.MetricName == "MRR").Trend);
+
+        Assert.Equal(
+            EvaluationMetricTrend.Improved,
+            Assert.Single(
+                comparison.Metrics,
+                m => m.MetricName == "AverageFirstRelevantRank").Trend);
+    }
+
     private static ExperimentRunRecord CreateRun(
         string experimentId,
         string modelName,

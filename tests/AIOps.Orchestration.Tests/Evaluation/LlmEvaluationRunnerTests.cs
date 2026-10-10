@@ -184,6 +184,87 @@ public sealed class LlmEvaluationRunnerTests
             model.GetProperty("PromptVersion").GetString());
     }
 
+    [Fact]
+    public async Task RunAsync_persists_estimated_cost_when_pricing_is_configured()
+    {
+        var gateway = new FakeLlmEvaluationGateway();
+        var store = new FakeEvaluationStore();
+        var runner = new LlmEvaluationRunner(gateway, store);
+        var dataset = CreateDataset();
+
+        var configuration = new EvaluationRunConfiguration(
+            "experiment-llm-cost",
+            new EvaluationModelMetadata(
+                "llm",
+                "test-model",
+                Provider: "nvidia",
+                InputPricePerMillionTokens: 2m,
+                OutputPricePerMillionTokens: 8m),
+            dataset.Name,
+            dataset.Version);
+
+        var run = await runner.RunAsync(
+            "dataset-cost",
+            dataset,
+            configuration);
+
+        using var metricsDocument = JsonDocument.Parse(run.MetricsJson);
+        var metrics = metricsDocument.RootElement;
+
+        Assert.Equal(
+            0.0002m,
+            metrics.GetProperty("EstimatedCost").GetDecimal());
+
+        Assert.Equal(
+            "USD",
+            metrics.GetProperty("CostCurrency").GetString());
+
+        using var configDocument = JsonDocument.Parse(run.ConfigJson);
+        var pricing = configDocument.RootElement.GetProperty("Pricing");
+
+        Assert.Equal(
+            2m,
+            pricing.GetProperty("InputPricePerMillionTokens").GetDecimal());
+
+        Assert.Equal(
+            8m,
+            pricing.GetProperty("OutputPricePerMillionTokens").GetDecimal());
+    }
+
+    [Fact]
+    public async Task RunAsync_leaves_estimated_cost_null_when_pricing_is_not_configured()
+    {
+        var gateway = new FakeLlmEvaluationGateway();
+        var store = new FakeEvaluationStore();
+        var runner = new LlmEvaluationRunner(gateway, store);
+        var dataset = CreateDataset();
+
+        var configuration = new EvaluationRunConfiguration(
+            "experiment-llm-no-pricing",
+            new EvaluationModelMetadata(
+                "llm",
+                "test-model",
+                Provider: "nvidia"),
+            dataset.Name,
+            dataset.Version);
+
+        var run = await runner.RunAsync(
+            "dataset-no-pricing",
+            dataset,
+            configuration);
+
+        using var metricsDocument = JsonDocument.Parse(run.MetricsJson);
+        var metrics = metricsDocument.RootElement;
+
+        Assert.Equal(
+            JsonValueKind.Null,
+            metrics.GetProperty("EstimatedCost").ValueKind);
+
+        Assert.Equal(
+            JsonValueKind.Null,
+            metrics.GetProperty("CostCurrency").ValueKind);
+    }
+
     private static EvaluationDataset CreateDataset()
     {
         return new EvaluationDataset(
@@ -221,7 +302,8 @@ public sealed class LlmEvaluationRunnerTests
     {
         private readonly string _responsePromptVersion;
 
-        public FakeLlmEvaluationGateway(string responsePromptVersion = "v1")
+        public FakeLlmEvaluationGateway(
+            string responsePromptVersion = "v1")
         {
             _responsePromptVersion = responsePromptVersion;
         }

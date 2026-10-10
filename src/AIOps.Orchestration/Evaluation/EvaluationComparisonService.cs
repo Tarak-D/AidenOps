@@ -168,7 +168,8 @@ public sealed class EvaluationComparisonService
                 "Precision",
                 "F1",
                 "MRR",
-                "HitAt"))
+                "HitAt",
+                "Hit@"))
         {
             return delta > 0
                 ? EvaluationMetricTrend.Improved
