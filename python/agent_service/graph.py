@@ -50,7 +50,7 @@ def _append_trace(
     state: AgentState,
     trace: dict,
 ) -> list[dict]:
-    existing = state.get("trace", [])
+    existing = state.get("trace") or []
 
     return [
         *existing,
@@ -215,6 +215,8 @@ def tool_proposal_node(
 ) -> AgentState:
     confidence = state.get("confidence", 0.0)
     threshold = state.get("triage_confidence_threshold", 0.6)
+    if threshold is None:
+        threshold = 0.6
     if confidence < threshold:
         proposal = None
         trace_summary = (
@@ -429,22 +431,22 @@ def build_graph():
     )
 
     graph.add_node(
-        "knowledge",
+        "knowledge_retrieval",
         knowledge_node,
     )
 
     graph.add_node(
-        "investigation",
+        "investigation_agent",
         investigation_node,
     )
 
     graph.add_node(
-        "tool_proposal",
+        "tool_proposal_agent",
         tool_proposal_node,
     )
 
     graph.add_node(
-        "decision",
+        "decision_agent",
         decision_node,
     )
 
@@ -465,26 +467,26 @@ def build_graph():
 
     graph.add_edge(
         "triage",
-        "knowledge",
+        "knowledge_retrieval",
     )
 
     graph.add_edge(
-        "knowledge",
-        "investigation",
+        "knowledge_retrieval",
+        "investigation_agent",
     )
 
     graph.add_edge(
-        "investigation",
-        "tool_proposal",
+        "investigation_agent",
+        "tool_proposal_agent",
     )
 
     graph.add_edge(
-        "tool_proposal",
-        "decision",
+        "tool_proposal_agent",
+        "decision_agent",
     )
 
     graph.add_conditional_edges(
-        "decision",
+        "decision_agent",
         route_decision,
         {
             "resolve": "resolve",

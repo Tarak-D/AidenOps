@@ -407,6 +407,74 @@ public sealed class LlmEvaluationRunnerBoundaryTests
     }
 
     [Fact]
+    public async Task RunAsync_rejects_duplicate_or_unknown_prediction_case_ids()
+    {
+        var gateway = new FakeLlmEvaluationGateway
+        {
+            Response = new LlmEvaluationResponse(
+                "llm",
+                new LlmEvaluationDatasetResponse(
+                    "golden-dataset-boundary",
+                    "phase15-golden",
+                    "v1"),
+                new LlmEvaluationModelResponse(
+                    "nvidia",
+                    "moonshotai/kimi-k3",
+                    "prompt-v15.4"),
+                1,
+                new LlmEvaluationMetricsResponse(
+                    1.0,
+                    1.0,
+                    1.0,
+                    0.90,
+                    100.0,
+                    100.0,
+                    50,
+                    10,
+                    60),
+                new[]
+                {
+                    new LlmEvaluationPredictionResponse(
+                        "unknown-case",
+                        "nvidia",
+                        "moonshotai/kimi-k3",
+                        "prompt-v15.4",
+                        "Infrastructure",
+                        "P1",
+                        0.90,
+                        true,
+                        true,
+                        true,
+                        50,
+                        10,
+                        60,
+                        100.0)
+                })
+        };
+
+        var store = new FakeEvaluationStore();
+        var runner = new LlmEvaluationRunner(gateway, store);
+        var dataset = CreateDataset();
+        var configuration = new EvaluationRunConfiguration(
+            "phase15.4-prediction-case-id-mismatch",
+            new EvaluationModelMetadata(
+                "llm",
+                "moonshotai/kimi-k3",
+                "nvidia",
+                PromptVersion: "prompt-v15.4"),
+            dataset.Name,
+            dataset.Version);
+
+        await Assert.ThrowsAsync<InvalidOperationException>(
+            () => runner.RunAsync(
+                "golden-dataset-boundary",
+                dataset,
+                configuration));
+
+        Assert.Null(store.RecordedRun);
+    }
+
+    [Fact]
     public async Task RunAsync_persists_llm_metrics_and_predictions()
     {
         var gateway = new FakeLlmEvaluationGateway

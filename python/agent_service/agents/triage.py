@@ -1,3 +1,6 @@
+from __future__ import annotations
+
+import math
 import os
 
 from agent_service.llm import (
@@ -190,7 +193,6 @@ def _triage_response_format(
     OpenRouter uses strict JSON Schema.
     Other providers continue using JSON object mode.
     """
-
     if provider == "openrouter":
         return {
             "type": "json_schema",
@@ -282,37 +284,57 @@ Incident description:
         response.content,
     )
 
-    domain = parsed.get("domain")
-    severity = parsed.get("severity")
-    confidence = parsed.get("confidence")
+    expected_fields = {
+        "domain",
+        "severity",
+        "confidence",
+    }
 
-    if domain not in _SUPPORTED_DOMAINS:
+    if set(parsed.keys()) != expected_fields:
+        raise ValueError(
+            "Model output must contain exactly these fields: "
+            "domain, severity, confidence."
+        )
+
+    domain = parsed["domain"]
+    severity = parsed["severity"]
+    confidence = parsed["confidence"]
+
+    if (
+        not isinstance(domain, str)
+        or domain not in _SUPPORTED_DOMAINS
+    ):
         raise ValueError(
             f"Unsupported model domain: {domain!r}"
         )
 
-    if severity not in _SUPPORTED_SEVERITIES:
+    if (
+        not isinstance(severity, str)
+        or severity not in _SUPPORTED_SEVERITIES
+    ):
         raise ValueError(
             f"Unsupported model severity: {severity!r}"
         )
 
-    try:
-        confidence = float(confidence)
-    except (
-        TypeError,
-        ValueError,
-    ) as exc:
+    if isinstance(confidence, bool) or not isinstance(
+        confidence,
+        (int, float),
+    ):
         raise ValueError(
             "Model confidence must be numeric."
-        ) from exc
+        )
 
-    confidence = max(
-        0.0,
-        min(
-            1.0,
-            confidence,
-        ),
-    )
+    if not math.isfinite(confidence):
+        raise ValueError(
+            "Model confidence must be finite."
+        )
+
+    if not 0.0 <= confidence <= 1.0:
+        raise ValueError(
+            "Model confidence must be between 0.0 and 1.0."
+        )
+
+    confidence = float(confidence)
 
     result = TriageResult(
         domain=domain,
@@ -364,7 +386,6 @@ def triage_ticket(
     Deterministic mode remains the default so CI and local
     development do not require external model credentials.
     """
-
     if incident is not None:
         if title is None:
             title = incident
@@ -430,10 +451,10 @@ def triage_ticket(
             provider=normalized_provider,
         )
 
-    except Exception as exc:
+    except Exception:
         raise RuntimeError(
             "LLM triage failed for provider "
             f"'{normalized_provider}'. Set "
             "AGENT_LLM_PROVIDER=deterministic for "
             "offline operation."
-        ) from exc
+        ) from None

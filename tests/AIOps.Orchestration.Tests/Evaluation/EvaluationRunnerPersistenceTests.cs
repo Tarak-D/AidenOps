@@ -141,7 +141,7 @@ public sealed class EvaluationRunnerPersistenceTests
             root.GetProperty("Notes").GetString());
 
         Assert.Contains(
-            "External tool execution was disabled",
+            "without executing tools",
             root.GetProperty("ExecutionNote").GetString());
     }
 

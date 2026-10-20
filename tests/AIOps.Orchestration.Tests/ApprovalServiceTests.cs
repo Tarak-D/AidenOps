@@ -366,6 +366,21 @@ public class ApprovalServiceTests
             _items[actionExecution.Id] = actionExecution;
             return Task.CompletedTask;
         }
+
+        public Task<bool> TryBeginExecutionAsync(
+            ActionExecution actionExecution,
+            CancellationToken ct = default)
+        {
+            if (actionExecution.Status != (actionExecution.RequiresApproval
+                    ? ActionStatus.Approved
+                    : ActionStatus.Proposed))
+            {
+                return Task.FromResult(false);
+            }
+
+            actionExecution.BeginExecution();
+            return Task.FromResult(true);
+        }
     }
 
     private sealed class FakeApprovalStore

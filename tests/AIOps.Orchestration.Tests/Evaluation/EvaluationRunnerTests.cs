@@ -3,6 +3,7 @@ using System.Text.Json;
 using AIOps.Abstractions.Agents;
 using AIOps.Abstractions.Evaluation;
 using AIOps.Contracts.AgentGateway;
+using AIOps.Domain;
 using AIOps.Infrastructure.Agents;
 using AIOps.Orchestration.Evaluation;
 using Moq;
@@ -11,6 +12,47 @@ namespace AIOps.Orchestration.Tests.Evaluation;
 
 public sealed class EvaluationRunnerTests
 {
+    [Fact]
+    public async Task RunAsync_does_not_fabricate_execution_or_resume_approval()
+    {
+        var gateway = new Mock<IAgentGateway>(MockBehavior.Strict);
+        gateway
+            .Setup(x => x.StartRunAsync(
+                It.IsAny<AgentRunRequest>(),
+                It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new AgentRunResult(
+                AgentRunOutcome.AwaitingApproval,
+                0.9,
+                TicketDomain.Infrastructure,
+                Severity.P1,
+                new ToolProposal("Example.Tool", "{}", 0.9, "Test proposal."),
+                null,
+                null,
+                Array.Empty<StepTrace>(),
+                null));
+
+        var runner = new EvaluationRunner(
+            gateway.Object,
+            new Mock<IEvaluationStore>().Object);
+
+        var result = await runner.RunAsync(
+            Phase8EvaluationDataset.Create(),
+            "phase-15-no-synthetic-execution",
+            "llm",
+            "test-model",
+            "test-prompt");
+
+        Assert.All(result.Cases, caseResult =>
+        {
+            Assert.Equal(AgentRunOutcome.AwaitingApproval, caseResult.FinalOutcome);
+            Assert.Null(caseResult.ExecutionSucceeded);
+        });
+
+        gateway.Verify(x => x.ResumeRunAsync(
+            It.IsAny<ResumeAgentRunRequest>(),
+            It.IsAny<CancellationToken>()), Times.Never);
+    }
+
     [Fact]
     public async Task RunAsync_calculates_repeatable_phase8_metrics()
     {

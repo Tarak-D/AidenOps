@@ -48,6 +48,9 @@ public sealed class OrchestratorTests
         actionStore.Setup(x => x.UpdateAsync(It.IsAny<ActionExecution>(), It.IsAny<CancellationToken>()))
             .Callback<ActionExecution, CancellationToken>((action, _) => persisted = action)
             .Returns(Task.CompletedTask);
+        actionStore.Setup(x => x.TryBeginExecutionAsync(It.IsAny<ActionExecution>(), It.IsAny<CancellationToken>()))
+            .Callback<ActionExecution, CancellationToken>((action, _) => action.BeginExecution())
+            .ReturnsAsync(true);
         var approvalStore = new Mock<IApprovalStore>();
         ApprovalRequest? persistedApproval = null;
         approvalStore.Setup(x => x.GetForActionExecutionAsync(It.IsAny<Guid>(), It.IsAny<CancellationToken>()))

@@ -95,4 +95,22 @@ public sealed class EvaluationRunConfigurationTests
         Assert.Throws<ArgumentException>(
             () => configuration.Validate());
     }
+
+    [Fact]
+    public void Validate_RejectsUnsupportedExternalToolExecution()
+    {
+        var configuration = new EvaluationRunConfiguration(
+            ExperimentId: "test",
+            Model: new EvaluationModelMetadata(
+                "llm",
+                "test-model"),
+            DatasetName: "dataset",
+            DatasetVersion: "1.0",
+            ExecuteExternalTools: true);
+
+        var exception = Assert.Throws<ArgumentException>(
+            () => configuration.Validate());
+
+        Assert.Contains("not supported", exception.Message);
+    }
 }

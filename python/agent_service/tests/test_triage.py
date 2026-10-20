@@ -1,21 +1,13 @@
 from __future__ import annotations
-
 import os
-
 import pytest
 
-from agent_service.agents.triage import (
-    triage_ticket,
-)
-
+from agent_service.agents.triage import triage_ticket
 
 def test_deterministic_triage_network_p1(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    monkeypatch.setenv(
-        "AGENT_LLM_PROVIDER",
-        "deterministic",
-    )
+    monkeypatch.setenv("AGENT_LLM_PROVIDER", "deterministic")
 
     result, trace = triage_ticket(
         "Production network outage. All users cannot connect."
@@ -33,10 +25,7 @@ def test_deterministic_triage_network_p1(
 def test_deterministic_triage_identity_p2(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    monkeypatch.setenv(
-        "AGENT_LLM_PROVIDER",
-        "deterministic",
-    )
+    monkeypatch.setenv("AGENT_LLM_PROVIDER", "deterministic")
 
     result, trace = triage_ticket(
         "Authentication is slow and intermittent for multiple users."
@@ -52,10 +41,7 @@ def test_deterministic_triage_identity_p2(
 def test_deterministic_triage_database_p3(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    monkeypatch.setenv(
-        "AGENT_LLM_PROVIDER",
-        "deterministic",
-    )
+    monkeypatch.setenv("AGENT_LLM_PROVIDER", "deterministic")
 
     result, trace = triage_ticket(
         "A database query needs investigation."
@@ -80,10 +66,7 @@ class FakeResponse:
 
 
 class FakeClient:
-    def __init__(
-        self,
-        provider: str,
-    ) -> None:
+    def __init__(self, provider: str) -> None:
         self.provider = provider
 
     def chat(
@@ -97,7 +80,6 @@ class FakeClient:
     ) -> FakeResponse:
         assert system_prompt
         assert user_prompt
-
         assert temperature == 0.0
         assert max_tokens == 512
 
@@ -119,20 +101,12 @@ class FakeClient:
                                     "Infrastructure",
                                     "Unknown",
                                 ],
-                                "description": (
-                                    "The incident domain."
-                                ),
+                                "description": "The incident domain.",
                             },
                             "severity": {
                                 "type": "string",
-                                "enum": [
-                                    "P1",
-                                    "P2",
-                                    "P3",
-                                ],
-                                "description": (
-                                    "The incident severity."
-                                ),
+                                "enum": ["P1", "P2", "P3"],
+                                "description": "The incident severity.",
                             },
                             "confidence": {
                                 "type": "number",
@@ -151,11 +125,8 @@ class FakeClient:
                     },
                 },
             }
-
         else:
-            assert response_format == {
-                "type": "json_object",
-            }
+            assert response_format == {"type": "json_object"}
 
         return FakeResponse()
 
@@ -177,10 +148,7 @@ def test_provider_triage(
     monkeypatch: pytest.MonkeyPatch,
     provider: str,
 ) -> None:
-    monkeypatch.setenv(
-        "AGENT_LLM_PROVIDER",
-        provider,
-    )
+    monkeypatch.setenv("AGENT_LLM_PROVIDER", provider)
 
     import agent_service.agents.triage as triage_module
 
@@ -209,10 +177,7 @@ def test_provider_triage(
 def test_provider_triage_with_title_and_description(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    monkeypatch.setenv(
-        "AGENT_LLM_PROVIDER",
-        "openrouter",
-    )
+    monkeypatch.setenv("AGENT_LLM_PROVIDER", "openrouter")
 
     import agent_service.agents.triage as triage_module
 
@@ -238,10 +203,7 @@ def test_provider_triage_with_title_and_description(
 def test_deterministic_triage_with_title_and_description(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    monkeypatch.setenv(
-        "AGENT_LLM_PROVIDER",
-        "deterministic",
-    )
+    monkeypatch.setenv("AGENT_LLM_PROVIDER", "deterministic")
 
     result, trace = triage_ticket(
         title="VPN failure",
@@ -259,12 +221,90 @@ def test_deterministic_triage_with_title_and_description(
 def test_provider_is_read_from_environment(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    monkeypatch.setenv(
-        "AGENT_LLM_PROVIDER",
-        "deterministic",
+    monkeypatch.setenv("AGENT_LLM_PROVIDER", "deterministic")
+
+    assert os.getenv("AGENT_LLM_PROVIDER") == "deterministic"
+
+
+@pytest.mark.parametrize(
+    "content",
+    [
+        # Missing confidence.
+        '{"domain":"Network","severity":"P2"}',
+
+        # Missing severity.
+        '{"domain":"Network","confidence":0.9}',
+
+        # Missing domain.
+        '{"severity":"P2","confidence":0.9}',
+
+        # Confidence above the allowed range.
+        '{"domain":"Network","severity":"P2","confidence":1.2}',
+
+        # Confidence below the allowed range.
+        '{"domain":"Network","severity":"P2","confidence":-0.1}',
+
+        # Unexpected field.
+        (
+            '{"domain":"Network","severity":"P2",'
+            '"confidence":0.9,"extra":"value"}'
+        ),
+    ],
+)
+def test_provider_triage_rejects_invalid_model_output(
+    monkeypatch: pytest.MonkeyPatch,
+    content: str,
+) -> None:
+    monkeypatch.setenv("AGENT_LLM_PROVIDER", "openai")
+
+    import agent_service.agents.triage as triage_module
+
+    class InvalidResponse(FakeResponse):
+        def __init__(self) -> None:
+            super().__init__()
+            self.content = content
+
+    class InvalidClient(FakeClient):
+        def chat(
+            self,
+            *,
+            system_prompt: str,
+            user_prompt: str,
+            temperature: float,
+            max_tokens: int,
+            response_format: dict,
+        ) -> FakeResponse:
+            return InvalidResponse()
+
+    monkeypatch.setattr(
+        triage_module,
+        "create_llm_client",
+        lambda provider: InvalidClient(provider),
     )
 
-    assert (
-        os.getenv("AGENT_LLM_PROVIDER")
-        == "deterministic"
+    with pytest.raises(RuntimeError, match="LLM triage failed"):
+        triage_ticket("VPN outage")
+
+
+def test_provider_triage_suppresses_provider_exception_details(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("AGENT_LLM_PROVIDER", "openai")
+
+    import agent_service.agents.triage as triage_module
+
+    class FailingClient:
+        def chat(self, **kwargs):
+            raise RuntimeError("request failed with secret-token-value")
+
+    monkeypatch.setattr(
+        triage_module,
+        "create_llm_client",
+        lambda provider: FailingClient(),
     )
+
+    with pytest.raises(RuntimeError, match="LLM triage failed") as error:
+        triage_ticket("VPN outage")
+
+    assert error.value.__cause__ is None
+    assert "secret-token-value" not in str(error.value)

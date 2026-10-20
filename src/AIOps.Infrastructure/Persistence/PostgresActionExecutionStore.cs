@@ -1,4 +1,5 @@
 using AIOps.Abstractions.Persistence;
+using AIOps.Domain;
 using AIOps.Domain.Entities;
 using AIOps.Infrastructure.EfCore;
 using Microsoft.EntityFrameworkCore;
@@ -36,5 +37,38 @@ public sealed class PostgresActionExecutionStore : IActionExecutionStore
     {
         _context.ActionExecutions.Update(actionExecution);
         await _context.SaveChangesAsync(ct);
+    }
+
+    public async Task<bool> TryBeginExecutionAsync(
+        ActionExecution actionExecution,
+        CancellationToken ct = default)
+    {
+        ArgumentNullException.ThrowIfNull(actionExecution);
+
+        var expectedStatus = actionExecution.Status;
+        if ((actionExecution.RequiresApproval && expectedStatus != ActionStatus.Approved) ||
+            (!actionExecution.RequiresApproval && expectedStatus != ActionStatus.Proposed))
+        {
+            return false;
+        }
+
+        var claimed = await _context.ActionExecutions
+            .Where(action =>
+                action.Id == actionExecution.Id &&
+                action.Status == expectedStatus &&
+                action.RequiresApproval == actionExecution.RequiresApproval)
+            .ExecuteUpdateAsync(
+                setters => setters.SetProperty(
+                    action => action.Status,
+                    ActionStatus.Executing),
+                ct);
+
+        if (claimed != 1)
+        {
+            return false;
+        }
+
+        actionExecution.BeginExecution();
+        return true;
     }
 }

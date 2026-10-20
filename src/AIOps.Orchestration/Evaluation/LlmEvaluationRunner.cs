@@ -291,6 +291,21 @@ public sealed class LlmEvaluationRunner
                 "LLM evaluation prediction count does not match the submitted cases.");
         }
 
+        var expectedCaseIds = request.Cases
+            .Select(evaluationCase => evaluationCase.CaseId)
+            .ToHashSet(StringComparer.Ordinal);
+        var predictionCaseIds = response.Predictions
+            .Select(prediction => prediction.CaseId)
+            .ToArray();
+
+        if (predictionCaseIds.Any(string.IsNullOrWhiteSpace) ||
+            predictionCaseIds.Distinct(StringComparer.Ordinal).Count() != predictionCaseIds.Length ||
+            !expectedCaseIds.SetEquals(predictionCaseIds))
+        {
+            throw new InvalidOperationException(
+                "LLM evaluation predictions do not match the submitted case IDs.");
+        }
+
         if (configuration.MaxCases is int maxCases &&
             request.Cases.Count > maxCases)
         {

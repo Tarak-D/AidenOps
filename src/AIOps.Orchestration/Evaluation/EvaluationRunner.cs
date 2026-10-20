@@ -169,7 +169,7 @@ public sealed class EvaluationRunner
                 dataset.Version,
                 ExecutionMode = "deterministic-agent-gateway",
                 ExecutionNote =
-                    "Approval-required cases are resumed with a synthetic successful tool result. No real external tool is executed by the evaluation runner."
+                    "The agent gateway is evaluated without executing tools or resuming approval-required proposals."
             };
         }
 
@@ -193,9 +193,7 @@ public sealed class EvaluationRunner
             configuration.ExecuteExternalTools,
             configuration.Notes,
             ExecutionNote =
-                configuration.ExecuteExternalTools
-                    ? "External tool execution was enabled by the evaluation configuration."
-                    : "External tool execution was disabled. Approval-required cases are resumed with a synthetic successful tool result."
+                "The agent gateway is evaluated without executing tools or resuming approval-required proposals."
         };
     }
 
@@ -220,27 +218,10 @@ public sealed class EvaluationRunner
 
         AgentRunResult finalResult = initialResult;
 
-        bool? executionSucceeded = initialResult.Proposal is null
-            ? null
-            : initialResult.Outcome == AgentRunOutcome.Resolved;
-
-        if (initialResult.Outcome == AgentRunOutcome.AwaitingApproval)
-        {
-            var resumeRequest = new ResumeAgentRunRequest(
-                correlationId,
-                evaluationCase.Ticket.TicketId,
-                ApprovalGranted: true,
-                ApprovalDecidedBy: "evaluation",
-                ToolResultJson: "{}",
-                ToolExecutionSucceeded: true);
-
-            finalResult = await _agentGateway.ResumeRunAsync(
-                resumeRequest,
-                ct);
-
-            executionSucceeded =
-                finalResult.Outcome == AgentRunOutcome.Resolved;
-        }
+        // The evaluation runner has no server-side approval or execution
+        // authority. Leave execution outcome unknown instead of synthesizing
+        // a successful tool result and reporting a fabricated resolution.
+        bool? executionSucceeded = null;
 
         stopwatch.Stop();
 

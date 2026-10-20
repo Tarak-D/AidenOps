@@ -40,6 +40,13 @@ public sealed record EvaluationRunConfiguration(
                 nameof(MaxCases));
         }
 
+        if (ExecuteExternalTools)
+        {
+            throw new ArgumentException(
+                "External tool execution is not supported by the evaluation runners.",
+                nameof(ExecuteExternalTools));
+        }
+
         Model.Validate();
     }
 }

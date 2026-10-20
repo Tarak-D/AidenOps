@@ -1,4 +1,5 @@
 import json
+import math
 import os
 import time
 from dataclasses import dataclass
@@ -29,6 +30,99 @@ class LlmClient(Protocol):
         ...
 
 
+_AUTHENTICATION_HEADER_NAMES = frozenset(
+    {
+        "authorization",
+        "proxy-authorization",
+        "x-api-key",
+        "api-key",
+        "x-goog-api-key",
+    }
+)
+
+
+def _validated_timeout(timeout_seconds: float, provider: str) -> float:
+    timeout = float(timeout_seconds)
+    if not math.isfinite(timeout) or timeout <= 0:
+        raise ValueError(
+            f"Timeout for provider '{provider}' must be a finite positive number."
+        )
+    return timeout
+
+
+def _parse_provider_response(
+    response: httpx.Response,
+    error_message: str,
+) -> Any:
+    try:
+        return response.json()
+    except ValueError:
+        pass
+
+    raise ValueError(error_message)
+
+
+def _usage_token_count(
+    usage: dict[str, Any],
+    primary_name: str,
+    fallback_name: str,
+    provider: str,
+) -> int:
+    if primary_name in usage:
+        value = usage[primary_name]
+    elif fallback_name in usage:
+        value = usage[fallback_name]
+    else:
+        raise ValueError(
+            f"Provider '{provider}' omitted token usage metadata."
+        )
+
+    if isinstance(value, bool) or not isinstance(value, int) or value < 0:
+        raise ValueError(
+            f"Provider '{provider}' returned invalid usage metadata."
+        )
+    return value
+
+
+def _post_provider_request(
+    *,
+    provider: str,
+    url: str,
+    timeout_seconds: float,
+    headers: dict[str, str],
+    payload: dict[str, Any],
+) -> httpx.Response:
+    request_failed = False
+    try:
+        with httpx.Client(timeout=timeout_seconds) as client:
+            response = client.post(
+                url,
+                headers=headers,
+                json=payload,
+            )
+    except httpx.RequestError:
+        request_failed = True
+
+    if request_failed:
+        raise RuntimeError(
+            f"Provider '{provider}' request failed."
+        )
+
+    status_code = None
+    try:
+        response.raise_for_status()
+    except httpx.HTTPStatusError:
+        status_code = response.status_code
+
+    if status_code is not None:
+        raise RuntimeError(
+            f"Provider '{provider}' returned HTTP "
+            f"{status_code}."
+        )
+
+    return response
+
+
 def _required_env(
     name: str,
 ) -> str:
@@ -50,8 +144,13 @@ def _resolve_model(
     provider: str,
     explicit_model: str | None = None,
 ) -> str:
-    if explicit_model:
-        return explicit_model.strip()
+    if explicit_model is not None:
+        model = explicit_model.strip()
+        if not model:
+            raise ValueError(
+                f"Explicit model for provider '{provider}' must not be blank."
+            )
+        return model
 
     common_model = os.getenv(
         "AGENT_LLM_MODEL",
@@ -117,8 +216,15 @@ class OpenAICompatibleClient:
         self.provider = provider
         self.base_url = base_url.rstrip("/")
         self.api_key = api_key.strip()
-        self.model = model
-        self.timeout_seconds = timeout_seconds
+        self.model = model.strip()
+        if not self.model:
+            raise ValueError(
+                f"Model for provider '{provider}' must not be blank."
+            )
+        self.timeout_seconds = _validated_timeout(
+            timeout_seconds,
+            provider,
+        )
         self.extra_headers = extra_headers or {}
         self.extra_payload = extra_payload or {}
 
@@ -140,7 +246,11 @@ class OpenAICompatibleClient:
         headers = {
             "Content-Type": "application/json",
             "Authorization": f"Bearer {self.api_key}",
-            **self.extra_headers,
+            **{
+                name: value
+                for name, value in self.extra_headers.items()
+                if name.casefold() not in _AUTHENTICATION_HEADER_NAMES
+            },
         }
 
         payload: dict[str, Any] = {
@@ -166,38 +276,50 @@ class OpenAICompatibleClient:
 
         started = time.perf_counter()
 
-        with httpx.Client(
-            timeout=self.timeout_seconds,
-        ) as client:
-            response = client.post(
-                f"{self.base_url}/chat/completions",
-                headers=headers,
-                json=payload,
-            )
+        response = _post_provider_request(
+            provider=self.provider,
+            url=f"{self.base_url}/chat/completions",
+            timeout_seconds=self.timeout_seconds,
+            headers=headers,
+            payload=payload,
+        )
 
         latency_ms = (
             time.perf_counter() - started
         ) * 1000.0
 
-        response.raise_for_status()
+        body = _parse_provider_response(
+            response,
+            f"Provider '{self.provider}' returned invalid JSON.",
+        )
 
-        body = response.json()
+        if not isinstance(body, dict):
+            raise ValueError(
+                f"Provider '{self.provider}' returned an invalid response object."
+            )
 
         choices = body.get(
             "choices",
-            [],
+            None,
         )
 
-        if not choices:
+        if not isinstance(choices, list) or not choices:
             raise ValueError(
                 f"Provider '{self.provider}' returned "
                 "no choices."
             )
 
-        message = choices[0].get(
-            "message",
-            {},
-        )
+        choice = choices[0]
+        if not isinstance(choice, dict):
+            raise ValueError(
+                f"Provider '{self.provider}' returned an invalid choice."
+            )
+
+        message = choice.get("message")
+        if not isinstance(message, dict):
+            raise ValueError(
+                f"Provider '{self.provider}' returned an invalid message."
+            )
 
         content = message.get("content")
 
@@ -213,31 +335,36 @@ class OpenAICompatibleClient:
                 "empty message content."
             )
 
-        usage = body.get("usage") or {}
+        usage = body.get("usage")
+        if usage is None:
+            usage = {}
+        if not isinstance(usage, dict):
+            raise ValueError(
+                f"Provider '{self.provider}' returned invalid usage metadata."
+            )
+
+        model = body.get("model", self.model)
+        if model is None:
+            model = self.model
+        if not isinstance(model, str) or not model.strip():
+            raise ValueError(
+                f"Provider '{self.provider}' returned invalid model metadata."
+            )
 
         return LlmResponse(
             content=content,
-            model=str(
-                body.get("model")
-                or self.model
+            model=model,
+            prompt_tokens=_usage_token_count(
+                usage,
+                "prompt_tokens",
+                "input_tokens",
+                self.provider,
             ),
-            prompt_tokens=int(
-                usage.get(
-                    "prompt_tokens",
-                    usage.get(
-                        "input_tokens",
-                        0,
-                    ),
-                )
-            ),
-            completion_tokens=int(
-                usage.get(
-                    "completion_tokens",
-                    usage.get(
-                        "output_tokens",
-                        0,
-                    ),
-                )
+            completion_tokens=_usage_token_count(
+                usage,
+                "completion_tokens",
+                "output_tokens",
+                self.provider,
             ),
             latency_ms=latency_ms,
         )
@@ -266,8 +393,9 @@ class NvidiaNimClient(OpenAICompatibleClient):
         timeout_seconds: float | None = None,
     ) -> None:
         configured_model = (
-            model
-            or os.getenv(
+            _resolve_model("nvidia", model)
+            if model is not None
+            else os.getenv(
                 "AGENT_LLM_MODEL",
                 "",
             ).strip()
@@ -601,6 +729,10 @@ class AnthropicClient:
                 "60",
             )
         )
+        self.timeout_seconds = _validated_timeout(
+            self.timeout_seconds,
+            self.provider,
+        )
 
     def chat(
         self,
@@ -640,22 +772,27 @@ class AnthropicClient:
 
         started = time.perf_counter()
 
-        with httpx.Client(
-            timeout=self.timeout_seconds,
-        ) as client:
-            response = client.post(
-                f"{self.base_url}/v1/messages",
-                headers=headers,
-                json=payload,
-            )
+        response = _post_provider_request(
+            provider=self.provider,
+            url=f"{self.base_url}/v1/messages",
+            timeout_seconds=self.timeout_seconds,
+            headers=headers,
+            payload=payload,
+        )
 
         latency_ms = (
             time.perf_counter() - started
         ) * 1000.0
 
-        response.raise_for_status()
+        body = _parse_provider_response(
+            response,
+            "Anthropic returned invalid JSON.",
+        )
 
-        body = response.json()
+        if not isinstance(body, dict):
+            raise ValueError(
+                "Anthropic returned an invalid response object."
+            )
 
         content_blocks = body.get(
             "content",
@@ -685,25 +822,36 @@ class AnthropicClient:
                 "content."
             )
 
-        usage = body.get("usage") or {}
+        usage = body.get("usage")
+        if usage is None:
+            usage = {}
+        if not isinstance(usage, dict):
+            raise ValueError(
+                "Anthropic returned invalid usage metadata."
+            )
+
+        model = body.get("model", self.model)
+        if model is None:
+            model = self.model
+        if not isinstance(model, str) or not model.strip():
+            raise ValueError(
+                "Anthropic returned invalid model metadata."
+            )
 
         return LlmResponse(
             content=content,
-            model=str(
-                body.get("model")
-                or self.model
+            model=model,
+            prompt_tokens=_usage_token_count(
+                usage,
+                "input_tokens",
+                "input_tokens",
+                self.provider,
             ),
-            prompt_tokens=int(
-                usage.get(
-                    "input_tokens",
-                    0,
-                )
-            ),
-            completion_tokens=int(
-                usage.get(
-                    "output_tokens",
-                    0,
-                )
+            completion_tokens=_usage_token_count(
+                usage,
+                "output_tokens",
+                "output_tokens",
+                self.provider,
             ),
             latency_ms=latency_ms,
         )
@@ -733,11 +881,17 @@ def create_llm_client(
 
     selected = (
         provider
-        or os.getenv(
+        if provider is not None
+        else os.getenv(
             "AGENT_LLM_PROVIDER",
             "deterministic",
         )
     ).strip().lower()
+
+    if not selected:
+        raise ValueError(
+            "AGENT_LLM_PROVIDER must not be blank."
+        )
 
     if selected == "nvidia":
         return NvidiaNimClient(

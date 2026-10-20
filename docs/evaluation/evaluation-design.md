@@ -82,6 +82,13 @@ The .NET evaluation run configuration includes:
 - An external-tool execution setting, defaulting to `false`.
 - Optional notes.
 
+Evaluation runners do not execute tools or perform approval/resume. Setting
+`ExecuteExternalTools` to `true` is rejected because there is no evaluation
+execution path that uses the server-side approval and `ToolExecutor` lifecycle.
+Approval-required outcomes therefore remain pending in the evaluation result,
+and execution success is left unknown rather than inferred from a synthetic
+tool result.
+
 The presence of these settings documents the intended controls; verify the runner's behavior and tests before relying on them as guarantees for every evaluation path.
 
 ## Areas requiring further verification

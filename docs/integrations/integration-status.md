@@ -26,6 +26,23 @@ Use distinct labels:
 
 Do not collapse these states into a single “complete” label.
 
+## Current source-level inventory
+
+The following classifications are based on adapters and mock-based tests in
+the repository. No live external service was contacted during this audit.
+
+| Area | Source-level status | Important boundary |
+|---|---|---|
+| Cloud | AWS EC2 SDK adapter present; Simulated remains the default. | AWS calls are behind `ICloudProvider` and `ToolExecutor`. SDK-mocked tests are not a live AWS smoke test. |
+| Directory | Microsoft Graph group membership adapter present; Simulated remains the default. | Production password reset explicitly remains unsupported. Role-assignable groups fail closed. Graph tests use SDK mocks. |
+| ITSM | ServiceNow, Jira Service Management, and Zendesk HTTP adapters and persisted selection are present. | Connector tests use mocked HTTP responses. No live tenant/account validation is recorded. |
+| VPN diagnostics | Cisco Secure Access, Palo Alto GlobalProtect, and Fortinet adapters are present, alongside Simulated. | Provider selection is persisted; configured real providers do not silently become Simulated. No live smoke test is recorded. |
+| General network diagnostics | Cisco ThousandEyes adapter is present; Simulated remains available. | Other listed vendor slots are unconfigured placeholders. Status checks and active diagnostics may contact a real provider when selected and configured. |
+
+Treat adapter presence and mock-tested behavior as implementation evidence,
+not proof of production authorization, tenant configuration, or live service
+availability.
+
 ## Cisco ThousandEyes
 
 The previous README describes an agent-to-server instant-test flow: create a test, poll for a result, then normalize diagnostic fields such as latency, packet loss, target/server, agent details, and provider status. It states that live verification requires valid credentials and account/agent configuration.

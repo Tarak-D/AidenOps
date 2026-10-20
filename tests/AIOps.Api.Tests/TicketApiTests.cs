@@ -474,6 +474,26 @@ public sealed class TicketApiTests : IClassFixture<WebApplicationFactory<Program
             return Task.CompletedTask;
         }
 
+        public Task<bool> TryBeginExecutionAsync(
+            ActionExecution actionExecution,
+            CancellationToken ct = default)
+        {
+            lock (_actions)
+            {
+                if (!_actions.TryGetValue(actionExecution.Id, out var persisted) ||
+                    !ReferenceEquals(persisted, actionExecution) ||
+                    actionExecution.Status != (actionExecution.RequiresApproval
+                        ? ActionStatus.Approved
+                        : ActionStatus.Proposed))
+                {
+                    return Task.FromResult(false);
+                }
+
+                actionExecution.BeginExecution();
+                return Task.FromResult(true);
+            }
+        }
+
         public Task AddAsync(ApprovalRequest approval, CancellationToken ct = default)
         {
             _approvals[approval.Id] = approval;

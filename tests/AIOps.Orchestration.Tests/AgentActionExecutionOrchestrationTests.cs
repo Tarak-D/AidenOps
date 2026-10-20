@@ -69,6 +69,25 @@ public sealed class AgentActionExecutionOrchestrationTests
     }
 
     [Fact]
+    public async Task Pre_execution_audit_failure_marks_action_failed_without_invoking_the_tool()
+    {
+        var harness = CreateHarness(RiskLevel.Safe, failStartAudit: true);
+
+        var result = await harness.Orchestrator.StartAgentRunAsync(
+            TicketId,
+            CreateRequest());
+
+        var action = Assert.Single(harness.Store.Actions.Values);
+        Assert.Equal(AgentRunOutcome.Escalated, result.Outcome);
+        Assert.Equal(ActionStatus.Failed, action.Status);
+        Assert.Equal("ExecutionStartAuditFailed", action.ResultSummary);
+        Assert.Equal(0, harness.Tool.ExecutionCount);
+        var resume = Assert.Single(harness.ResumeRequests);
+        Assert.Equal("Failed", resume.ActionStatus);
+        Assert.Equal("ExecutionStartAuditFailed", resume.ToolExecutionError);
+    }
+
+    [Fact]
     public async Task Approval_required_proposal_waits_and_approved_action_executes()
     {
         var harness = CreateHarness(RiskLevel.Moderate);
@@ -151,6 +170,40 @@ public sealed class AgentActionExecutionOrchestrationTests
         Assert.Equal(ActionStatus.Approved, action.Status);
         Assert.Equal(0, harness.Tool.ExecutionCount);
         Assert.Empty(harness.ResumeRequests);
+    }
+
+    [Fact]
+    public async Task Concurrent_execution_requests_claim_an_action_only_once()
+    {
+        var harness = CreateHarness(RiskLevel.Moderate);
+        await harness.Orchestrator.StartAgentRunAsync(TicketId, CreateRequest());
+        var action = Assert.Single(harness.Store.Actions.Values);
+        var approval = Assert.Single(harness.Store.Approvals.Values);
+        approval.Decide(true, "approver@example.com", "Approved.", Now);
+        action.MarkApproved();
+
+        var results = await Task.WhenAll(
+            CaptureExecutionAsync(harness, action.Id),
+            CaptureExecutionAsync(harness, action.Id));
+
+        Assert.Single(results, result => result is null);
+        Assert.Single(results, result => result is DomainInvariantViolationException);
+        Assert.Equal(1, harness.Tool.ExecutionCount);
+    }
+
+    private static async Task<Exception?> CaptureExecutionAsync(
+        Harness harness,
+        Guid actionId)
+    {
+        try
+        {
+            await harness.Orchestrator.ExecuteApprovedActionAsync(actionId);
+            return null;
+        }
+        catch (Exception exception)
+        {
+            return exception;
+        }
     }
 
     [Fact]
@@ -262,9 +315,10 @@ public sealed class AgentActionExecutionOrchestrationTests
 
     private static Harness CreateHarness(
         RiskLevel risk,
-        bool succeeds = true)
+        bool succeeds = true,
+        bool failStartAudit = false)
     {
-        var store = new InMemoryLifecycleStore();
+        var store = new InMemoryLifecycleStore(failStartAudit);
         var tool = new TestTool(risk, succeeds);
         var registry = new ToolRegistry([tool]);
         var clock = new FixedClock(Now);
@@ -375,12 +429,14 @@ public sealed class AgentActionExecutionOrchestrationTests
         }
     }
 
-    private sealed class InMemoryLifecycleStore :
+    private sealed class InMemoryLifecycleStore(bool failStartAudit) :
         IActionExecutionStore,
         IApprovalStore,
         IApprovalValidator,
         IAuditStore
     {
+        private readonly object _actionLock = new();
+
         public Dictionary<Guid, ActionExecution> Actions { get; } = [];
         public Dictionary<Guid, ApprovalRequest> Approvals { get; } = [];
         public List<AuditRecordInput> AuditRecords { get; } = [];
@@ -398,6 +454,31 @@ public sealed class AgentActionExecutionOrchestrationTests
         {
             Actions[actionExecution.Id] = actionExecution;
             return Task.CompletedTask;
+        }
+
+        public Task<bool> TryBeginExecutionAsync(
+            ActionExecution actionExecution,
+            CancellationToken ct = default)
+        {
+            lock (_actionLock)
+            {
+                if (!Actions.TryGetValue(actionExecution.Id, out var persisted) ||
+                    !ReferenceEquals(persisted, actionExecution))
+                {
+                    return Task.FromResult(false);
+                }
+
+                var expectedStatus = actionExecution.RequiresApproval
+                    ? ActionStatus.Approved
+                    : ActionStatus.Proposed;
+                if (actionExecution.Status != expectedStatus)
+                {
+                    return Task.FromResult(false);
+                }
+
+                actionExecution.BeginExecution();
+                return Task.FromResult(true);
+            }
         }
 
         public Task AddAsync(ApprovalRequest approval, CancellationToken ct = default)
@@ -427,6 +508,11 @@ public sealed class AgentActionExecutionOrchestrationTests
 
         public Task AppendAsync(AuditRecordInput record, CancellationToken ct = default)
         {
+            if (failStartAudit && record.EventType == "ActionExecutionStarted")
+            {
+                throw new InvalidOperationException("Audit store unavailable.");
+            }
+
             AuditRecords.Add(record);
             return Task.CompletedTask;
         }

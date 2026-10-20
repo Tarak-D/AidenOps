@@ -223,6 +223,52 @@ public sealed class PostgresActionApprovalStoreTests
         }
     }
 
+    [Fact]
+    public async Task Action_execution_claim_is_atomic_across_contexts()
+    {
+        var action = NewAction(Guid.NewGuid());
+        try
+        {
+            await using (var setup = CreateContext())
+            {
+                await new PostgresActionExecutionStore(setup).AddAsync(action);
+            }
+
+            await using var firstContext = CreateContext();
+            await using var secondContext = CreateContext();
+            var firstStore = new PostgresActionExecutionStore(firstContext);
+            var secondStore = new PostgresActionExecutionStore(secondContext);
+            var firstAction = await firstStore.GetAsync(action.Id);
+            var secondAction = await secondStore.GetAsync(action.Id);
+            Assert.NotNull(firstAction);
+            Assert.NotNull(secondAction);
+
+            var claims = await Task.WhenAll(
+                firstStore.TryBeginExecutionAsync(firstAction),
+                secondStore.TryBeginExecutionAsync(secondAction));
+
+            Assert.Single(claims, claimed => claimed);
+            Assert.Single(claims, claimed => !claimed);
+
+            await using var verifyContext = CreateContext();
+            var persisted = await new PostgresActionExecutionStore(verifyContext)
+                .GetAsync(action.Id);
+            Assert.NotNull(persisted);
+            Assert.Equal(ActionStatus.Executing, persisted.Status);
+        }
+        finally
+        {
+            await using var cleanup = CreateContext();
+            var persisted = await cleanup.ActionExecutions
+                .SingleOrDefaultAsync(candidate => candidate.Id == action.Id);
+            if (persisted is not null)
+            {
+                cleanup.ActionExecutions.Remove(persisted);
+                await cleanup.SaveChangesAsync();
+            }
+        }
+    }
+
     private static AIOpsDbContext CreateContext()
     {
         var options = new DbContextOptionsBuilder<AIOpsDbContext>()

@@ -364,30 +364,53 @@ public sealed class Orchestrator
         Guid correlationId,
         CancellationToken ct)
     {
-        action.BeginExecution();
-        await _actionExecutionStore.UpdateAsync(action, ct);
-        await AppendActionExecutionAuditAsync(
-            correlationId,
-            action,
-            "ActionExecutionStarted",
-            null,
-            ct);
+        if (!await _actionExecutionStore.TryBeginExecutionAsync(action, ct))
+        {
+            throw new DomainInvariantViolationException(
+                $"Action execution {action.Id} has already been claimed or is not ready to execute.");
+        }
+
+        try
+        {
+            await AppendActionExecutionAuditAsync(
+                correlationId,
+                action,
+                "ActionExecutionStarted",
+                null,
+                ct);
+        }
+        catch (Exception)
+        {
+            // The tool has not been invoked yet, so this claim can safely be
+            // finalized as failed. Do not leave it Executing solely because
+            // the pre-execution audit write failed.
+            _logger.LogError(
+                "Could not record the start of action execution {ActionExecutionId}.",
+                action.Id);
+
+            var startAuditFailureResult = new ToolResult(
+                false,
+                "Tool execution was not started.",
+                Error: "ExecutionStartAuditFailed");
+            action.MarkFailed(startAuditFailureResult.Error, _clock.UtcNow);
+            await _actionExecutionStore.UpdateAsync(action, CancellationToken.None);
+            return startAuditFailureResult;
+        }
 
         ToolResult result;
         try
         {
             result = await _toolExecutor.ExecuteAsync(action, ct);
         }
-        catch (Exception ex)
+        catch (Exception)
         {
             _logger.LogError(
-                ex,
                 "Tool execution failed for action {ActionExecutionId}.",
                 action.Id);
             result = new ToolResult(
                 false,
                 "Tool execution failed.",
-                Error: ex.Message);
+                Error: "ToolExecutionFailed");
         }
 
         var now = _clock.UtcNow;

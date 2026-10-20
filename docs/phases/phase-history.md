@@ -26,10 +26,10 @@ The previous README marked Phases 1-14 complete. That historical statement is no
 
 ## Latest recorded checkpoint
 
-- Commit: `9d3941e`
-- Commit message: `Add evaluation cost tracking and regression tests`
-- Recorded .NET test result: 503 passed, 0 failed, 0 skipped.
-- Recorded Python test result: 130 passed, 0 failed, with one deprecation warning.
+- Repository HEAD: `2e7aaf2`
+- Commit message: `Add scikit-learn evaluation dependency`
+- Current working-tree verification: .NET 509 passed, 0 failed, 0 skipped; Python 159 passed, 0 failed, with one Starlette/AnyIO deprecation warning.
+- These results include uncommitted audit changes and are not a release checkpoint.
 
 These results are historical checkpoint results. Rerun the test suites to establish the current results after documentation changes.
 
@@ -45,6 +45,12 @@ The broader evaluation roadmap still requires verification and may include:
 - Expanded LLM triage and end-to-end evaluation.
 - Provider, model, and prompt comparisons.
 - Persisted regression reporting and defined metric thresholds.
+
+The classical baseline uses a fixed training corpus and an evaluation corpus
+with close semantic overlap. No explicit train/test split or independent
+generalization study is established, so its score is not a generalization
+claim. Evaluation runners do not execute tools; when the server-side execution
+lifecycle was not run, execution outcomes remain unknown.
 
 Do not mark these roadmap items complete until the implementation and tests demonstrate them.
 

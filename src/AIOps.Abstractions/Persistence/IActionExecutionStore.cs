@@ -15,4 +15,12 @@ public interface IActionExecutionStore
     Task UpdateAsync(
         ActionExecution actionExecution,
         CancellationToken ct = default);
+
+    /// <summary>
+    /// Atomically claims a proposed/saved approved action for its single execution
+    /// attempt and transitions the supplied entity to Executing.
+    /// </summary>
+    Task<bool> TryBeginExecutionAsync(
+        ActionExecution actionExecution,
+        CancellationToken ct = default);
 }

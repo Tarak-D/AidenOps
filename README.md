@@ -38,10 +38,10 @@ Python handles agent workflow and proposals. Privileged tools are executed throu
 
 - Phases 1–14: recorded as complete in the project history.
 - Phase 15: advanced evaluation improvements are in progress; do not treat every originally planned Phase 15 item as complete without checking the implementation.
-- Latest recorded commit: `9d3941e` — `Add evaluation cost tracking and regression tests`.
-- Latest recorded .NET test run: **503 passed, 0 failed, 0 skipped**.
-- Latest recorded Python test run: **130 passed, 0 failed**, with one Starlette/AnyIO deprecation warning.
-- Last recorded Git status: clean and synchronized with `origin/master`.
+- Repository HEAD: `2e7aaf2` — `Add scikit-learn evaluation dependency`.
+- Latest local .NET test run: **509 passed, 0 failed, 0 skipped**.
+- Latest local Python test run: **161 passed, 0 failed**, with one Starlette/AnyIO deprecation warning.
+- These test results include uncommitted audit changes and are not a release checkpoint.
 
 These are the latest recorded results from the development session, not a guarantee that the tests have been rerun against every later change.
 
@@ -54,6 +54,8 @@ The latest recorded Phase 15 changes include:
 - Persisted estimated cost and USD currency metadata when pricing is configured.
 - Regression-comparison handling for `Hit@` metrics.
 - Additional evaluation runner, metadata, and comparison regression tests.
+- Evaluation runners do not execute tools or synthesize successful approval/execution outcomes.
+- The LLM evaluation boundary verifies that prediction IDs match the submitted cases.
 
 Pricing-based cost is an estimate based on configured rates and reported token counts; it is not a provider invoice.
 
