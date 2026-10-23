@@ -79,12 +79,17 @@ public sealed class EvaluationRunner
                 nameof(dataset));
         }
 
+        IReadOnlyList<EvaluationCase> selectedCases =
+            configuration?.MaxCases is int maxCases
+                ? dataset.Cases.Take(maxCases).ToArray()
+                : dataset.Cases;
+
         var startedAt = _timeProvider.GetUtcNow();
 
         var caseResults = new List<EvaluationCaseResult>(
-            dataset.Cases.Count);
+            selectedCases.Count);
 
-        foreach (var evaluationCase in dataset.Cases)
+        foreach (var evaluationCase in selectedCases)
         {
             ct.ThrowIfCancellationRequested();
 
@@ -126,7 +131,8 @@ public sealed class EvaluationRunner
             modelType,
             modelName,
             promptVersion,
-            configuration);
+            configuration,
+            selectedCases.Count);
 
         var notes = configuration?.Notes
             ?? "Phase 15.1 evaluation foundation.";
@@ -140,7 +146,7 @@ public sealed class EvaluationRunner
             dataset.Name,
             dataset.Version,
             JsonSerializer.Serialize(config),
-            dataset.Cases.Count,
+            selectedCases.Count,
             startedAt,
             finishedAt,
             JsonSerializer.Serialize(persistedMetrics),
@@ -159,7 +165,8 @@ public sealed class EvaluationRunner
         string modelType,
         string modelName,
         string? promptVersion,
-        EvaluationRunConfiguration? configuration)
+        EvaluationRunConfiguration? configuration,
+        int sampleCount)
     {
         if (configuration is null)
         {
@@ -167,6 +174,7 @@ public sealed class EvaluationRunner
             {
                 dataset.Name,
                 dataset.Version,
+                SampleCount = sampleCount,
                 ExecutionMode = "deterministic-agent-gateway",
                 ExecutionNote =
                     "The agent gateway is evaluated without executing tools or resuming approval-required proposals."
@@ -177,6 +185,7 @@ public sealed class EvaluationRunner
         {
             dataset.Name,
             dataset.Version,
+            SampleCount = sampleCount,
             ExecutionMode = configuration.Deterministic
                 ? "deterministic-agent-gateway"
                 : "agent-gateway",
@@ -260,9 +269,9 @@ public sealed class EvaluationRunner
                 initialResult.Proposal.ArgumentsJson);
         }
 
-        var trace = initialResult.Trace
-            .Concat(finalResult.Trace)
-            .ToArray();
+        var trace = CombineTraces(
+            initialResult.Trace,
+            finalResult.Trace);
 
         return new EvaluationCaseResult(
             evaluationCase.Id,
@@ -293,6 +302,21 @@ public sealed class EvaluationRunner
             trace.Sum(t => t.TokensCompletion),
             null,
             trace);
+    }
+
+    private static IReadOnlyList<StepTrace> CombineTraces(
+        IReadOnlyList<StepTrace> initialTrace,
+        IReadOnlyList<StepTrace> finalTrace)
+    {
+        if (finalTrace.Count >= initialTrace.Count &&
+            finalTrace.Take(initialTrace.Count).SequenceEqual(initialTrace))
+        {
+            return finalTrace;
+        }
+
+        return initialTrace
+            .Concat(finalTrace)
+            .ToArray();
     }
 
     private static bool IsValidJsonObject(string json)

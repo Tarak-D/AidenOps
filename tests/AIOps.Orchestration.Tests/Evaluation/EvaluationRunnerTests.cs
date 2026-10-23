@@ -1,5 +1,6 @@
 
 using System.Text.Json;
+using System.Reflection;
 using AIOps.Abstractions.Agents;
 using AIOps.Abstractions.Evaluation;
 using AIOps.Contracts.AgentGateway;
@@ -156,5 +157,161 @@ public sealed class EvaluationRunnerTests
                     r.DatasetName == Phase8EvaluationDataset.Name),
                 It.IsAny<CancellationToken>()),
             Times.Once);
+    }
+
+    [Fact]
+    public async Task RunAsync_with_configuration_respects_max_cases_and_persists_evaluated_count()
+    {
+        var dataset = Phase8EvaluationDataset.Create();
+        var gateway = new Mock<IAgentGateway>(MockBehavior.Strict);
+        gateway
+            .Setup(x => x.StartRunAsync(
+                It.IsAny<AgentRunRequest>(),
+                It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new AgentRunResult(
+                AgentRunOutcome.Resolved,
+                0.9,
+                TicketDomain.Infrastructure,
+                Severity.P1,
+                null,
+                null,
+                "Test resolution.",
+                Array.Empty<StepTrace>(),
+                null));
+
+        var runner = new EvaluationRunner(
+            gateway.Object,
+            new Mock<IEvaluationStore>().Object);
+        var configuration = new EvaluationRunConfiguration(
+            "phase-15-max-cases",
+            new EvaluationModelMetadata("llm", "test-model"),
+            dataset.Name,
+            dataset.Version,
+            MaxCases: 2);
+
+        var result = await runner.RunAsync(dataset, configuration);
+
+        Assert.Equal(2, result.Cases.Count);
+        Assert.Equal(2, result.Metrics.SampleCount);
+        Assert.Equal(2, result.Run.SampleCount);
+
+        using var metricsDocument = JsonDocument.Parse(result.Run.MetricsJson);
+        Assert.Equal(
+            2,
+            metricsDocument.RootElement.GetProperty("SampleCount").GetInt32());
+
+        using var configDocument = JsonDocument.Parse(result.Run.ConfigJson);
+        Assert.Equal(
+            2,
+            configDocument.RootElement.GetProperty("SampleCount").GetInt32());
+        Assert.Equal(
+            2,
+            configDocument.RootElement.GetProperty("MaxCases").GetInt32());
+
+        gateway.Verify(
+            x => x.StartRunAsync(
+                It.IsAny<AgentRunRequest>(),
+                It.IsAny<CancellationToken>()),
+            Times.Exactly(2));
+    }
+
+    [Fact]
+    public async Task RunAsync_does_not_duplicate_trace_entries_or_token_usage()
+    {
+        var dataset = Phase8EvaluationDataset.Create();
+        var evaluationCase = dataset.Cases[0];
+        var trace = new StepTrace(
+            "EvaluationTestAgent",
+            "triage",
+            "test-model",
+            "test-prompt",
+            11,
+            7,
+            1.0,
+            "Evaluation trace.");
+        var gateway = new Mock<IAgentGateway>(MockBehavior.Strict);
+        gateway
+            .Setup(x => x.StartRunAsync(
+                It.IsAny<AgentRunRequest>(),
+                It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new AgentRunResult(
+                AgentRunOutcome.Resolved,
+                0.9,
+                evaluationCase.ExpectedDomain,
+                evaluationCase.ExpectedSeverity,
+                null,
+                null,
+                "Test resolution.",
+                new[] { trace },
+                null));
+
+        var runner = new EvaluationRunner(
+            gateway.Object,
+            new Mock<IEvaluationStore>().Object);
+        var singleCaseDataset = new EvaluationDataset(
+            dataset.Name,
+            dataset.Version,
+            new[] { evaluationCase });
+
+        var result = await runner.RunAsync(
+            singleCaseDataset,
+            "phase-15-trace-count",
+            "llm",
+            "test-model",
+            "test-prompt");
+
+        var caseResult = Assert.Single(result.Cases);
+        Assert.Equal(new[] { trace }, caseResult.Trace);
+        Assert.Equal(11, caseResult.PromptTokens);
+        Assert.Equal(7, caseResult.CompletionTokens);
+        Assert.Equal(11, result.Metrics.PromptTokens);
+        Assert.Equal(7, result.Metrics.CompletionTokens);
+
+        using var metricsDocument = JsonDocument.Parse(result.Run.MetricsJson);
+        Assert.Equal(
+            11,
+            metricsDocument.RootElement.GetProperty("PromptTokens").GetInt32());
+        Assert.Equal(
+            7,
+            metricsDocument.RootElement.GetProperty("CompletionTokens").GetInt32());
+    }
+
+    [Fact]
+    public void CombineTraces_preserves_additional_events_without_double_counting_tokens()
+    {
+        var initialEvent = new StepTrace(
+            "EvaluationTestAgent",
+            "triage",
+            "test-model",
+            "test-prompt",
+            11,
+            7,
+            1.0,
+            "Initial evaluation trace.");
+        var additionalEvent = new StepTrace(
+            "EvaluationTestAgent",
+            "verify",
+            "test-model",
+            "test-prompt",
+            5,
+            3,
+            1.0,
+            "Additional final trace.");
+        var initialTrace = new[] { initialEvent };
+        var finalTrace = new[] { initialEvent, additionalEvent };
+
+        var combineTraces = typeof(EvaluationRunner).GetMethod(
+            "CombineTraces",
+            BindingFlags.NonPublic | BindingFlags.Static);
+
+        Assert.NotNull(combineTraces);
+        var mergedTrace = Assert.IsAssignableFrom<IReadOnlyList<StepTrace>>(
+            combineTraces.Invoke(null, [initialTrace, finalTrace]));
+
+        Assert.Equal(2, mergedTrace.Count);
+        Assert.Equal(1, mergedTrace.Count(trace => trace == initialEvent));
+        Assert.Contains(additionalEvent, mergedTrace);
+        Assert.Equal(16, mergedTrace.Sum(trace => trace.TokensPrompt));
+        Assert.Equal(10, mergedTrace.Sum(trace => trace.TokensCompletion));
     }
 }
