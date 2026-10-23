@@ -71,6 +71,49 @@ This is an estimate based on configured prices and reported token counts, not ne
 
 The source includes a retrieval evaluation runner. Review its metrics and test coverage before documenting individual retrieval metrics or claiming complete retrieval-quality reporting.
 
+### Deterministic acceptance-gate core
+
+The .NET evaluation core supports an explicit acceptance policy with required
+metric names, an explicit higher-is-better or lower-is-better direction, and
+an allowed absolute regression for each metric. The gate compares one uniquely
+resolved run for a named baseline experiment with one uniquely resolved run
+for a named candidate experiment. It does not treat all pairwise comparison
+report entries as release gates.
+
+The result is deterministic for the same runs and policy. It reports an
+overall `Passed`, `Failed`, or `Blocked` status and per-metric observed values,
+regression amount, allowance, and threshold violation where available.
+Metric values and allowances use decimal arithmetic; regression is the
+adverse-direction difference, floored at zero. A regression equal to the
+allowance passes, while any larger value fails without a floating-point
+epsilon. Required metric JSON values that are malformed, duplicated,
+nonnumeric, or outside the supported decimal range fail closed. Missing or
+invalid required metric values fail. Missing/ambiguous runs, missing required
+compatibility metadata, and incompatible runs are blocked, never passed.
+Policies require at least one unique metric, a valid explicit direction, and
+a non-negative decimal allowance.
+
+Compatibility requires distinct persisted run IDs, matching dataset name and
+version, positive matching sample counts, matching model type/name and prompt
+version, and equivalent non-empty configuration JSON. LLM runs must also have
+non-empty provider and model-version fields in the configuration, whose
+configured model type/name/prompt version must match the run record.
+Configuration comparison ignores root-level notes, explanatory execution
+notes, and the redundant root-level sample count; all other persisted
+configuration fields must match.
+
+Provider and model-version values are required and compared for LLM runs, but
+are self-reported persisted metadata, not independently attested provider
+identity or immutable model revision. Dataset identity/version and sample
+count are checked, but persisted run records do not include dataset case IDs
+or a content digest, so identical dataset labels/counts cannot prove identical
+case contents. Hidden runtime settings not recorded in configuration also
+cannot be verified. The gate does not infer these provenance details.
+
+This batch adds no endpoint, persistence for gate results, CI workflow, agent
+execution, or tool execution. The existing read-only comparison endpoint and
+its pairwise trend-report semantics are unchanged.
+
 ## Run configuration and safety
 
 The .NET evaluation run configuration includes:
