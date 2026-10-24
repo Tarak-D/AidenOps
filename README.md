@@ -96,6 +96,24 @@ pytest -q
 
 For the full setup and safe development defaults, see [Development](docs/development/README.md).
 
+## Local Development and Connectivity Verification
+
+Start the local PostgreSQL service from the repository root:
+
+```powershell
+docker compose up -d postgres
+```
+
+PostgreSQL is exposed on port `5432`. Run the Python service from the `python` directory using the documented command:
+
+```powershell
+uvicorn agent_service.main:app --host 127.0.0.1 --port 8000
+```
+
+Its health endpoint is `http://127.0.0.1:8000/health`. The .NET host was verified at `http://127.0.0.1:5166`; `GET /api/v1/meta/config` reported `agentGateway: Http`. The committed `src/AIOps.Host/appsettings.json` default remains `Fake`; HTTP mode was enabled for the local running process with `AI__AgentGatewayMode=Http`.
+
+A disposable connectivity probe confirmed that the .NET gateway successfully invoked the Python agent service. NVIDIA NIM credentials are optional for this deterministic local connectivity check. This verifies service connectivity only; real incident resolution, NVIDIA inference, and external provider integrations were not verified.
+
 ## Safety boundary
 
 ```text
