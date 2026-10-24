@@ -110,9 +110,32 @@ or a content digest, so identical dataset labels/counts cannot prove identical
 case contents. Hidden runtime settings not recorded in configuration also
 cannot be verified. The gate does not infer these provenance details.
 
-This batch adds no endpoint, persistence for gate results, CI workflow, agent
-execution, or tool execution. The existing read-only comparison endpoint and
-its pairwise trend-report semantics are unchanged.
+### Persisted acceptance decisions
+
+`POST /api/v1/evaluations/acceptance` accepts only a baseline and candidate
+experiment ID. It uses the existing `CanViewQueue` evaluation API policy and
+loads the acceptance policy from server-controlled `EvaluationAcceptance`
+configuration (`Name` and `RequiredMetrics`, each with a metric name,
+direction, and decimal allowed regression). Policy values are not accepted
+from the request. The base configuration intentionally supplies no acceptance
+thresholds; the endpoint returns `503 Service Unavailable` until a valid
+server-side policy is configured.
+
+The endpoint invokes the deterministic gate and persists every completed
+decision, including `Passed`, `Failed`, and fail-closed `Blocked` results.
+Records include a stable result ID and evaluation timestamp, baseline and
+candidate experiment/run IDs, a snapshot of the policy and rules, outcome,
+issues, and per-metric values/statuses. They do not copy run configuration,
+notes, credentials, or other unnecessary request data. A persistence failure
+returns an error response and does not report a successful saved result.
+
+The additive `evaluation_acceptance_results` schema is included in
+`PostgreSQL-Phase15-Batch2.sql`. This repository uses SQL schema scripts rather
+than automatic EF migrations; apply the script before using the persistence
+endpoint. Existing evaluation runs are not modified or deleted. The comparison
+endpoint remains read-only and retains its pairwise trend-report semantics.
+Acceptance requests do not invoke Python agents or operational tools. This
+batch adds no CI/release enforcement.
 
 ## Run configuration and safety
 
@@ -142,7 +165,7 @@ Before describing these areas as complete, verify their implementation, integrat
 - Full end-to-end evaluation across triage, investigation, decisions, and tool proposals.
 - Consistent experiment metadata across all evaluation paths.
 - Provider, model, and prompt comparisons using comparable datasets and configurations.
-- Persisted regression thresholds, reporting, and automated failure gates.
+- Automated CI/release enforcement of acceptance decisions.
 - Defined metric direction, aggregation, missing-value handling, and acceptance thresholds.
 - Retrieval metrics and their interpretation.
 - Live-provider evaluation behavior and cost accuracy.

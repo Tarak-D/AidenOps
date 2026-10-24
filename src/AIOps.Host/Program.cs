@@ -62,6 +62,11 @@ builder.Services.AddAIOpsInfrastructure(
 builder.Services.AddScoped<LlmEvaluationRunner>();
 builder.Services.AddScoped<RetrievalEvaluationRunner>();
 builder.Services.AddScoped<EvaluationComparisonService>();
+builder.Services.AddScoped<EvaluationAcceptanceGate>();
+builder.Services.AddScoped<EvaluationAcceptanceService>();
+builder.Services.Configure<EvaluationAcceptancePolicyOptions>(
+    builder.Configuration.GetSection(
+        EvaluationAcceptancePolicyOptions.SectionName));
 
 builder.Services.AddSingleton<ITool, GetInstanceStatusTool>();
 builder.Services.AddSingleton<ITool, RestartInstanceTool>();

@@ -13,6 +13,7 @@ public sealed class AIOpsDbContext : DbContext
     public AIOpsDbContext(DbContextOptions<AIOpsDbContext> options) : base(options) { }
     public DbSet<AuditRecordEntity> AuditRecords { get; set; }
     public DbSet<EvaluationRecordEntity> EvaluationRuns { get; set; }
+    public DbSet<EvaluationAcceptanceRecordEntity> EvaluationAcceptanceResults { get; set; }
     public DbSet<EvaluationDatasetRecordEntity> EvaluationDatasets { get; set; }
     public DbSet<ActionExecution> ActionExecutions { get; set; }
     public DbSet<ApprovalRequest> ApprovalRequests { get; set; }
@@ -62,6 +63,43 @@ public sealed class AIOpsDbContext : DbContext
             entity.HasIndex(e => e.ExperimentId);
             entity.HasIndex(e => e.ModelType);
             entity.HasIndex(e => e.StartedAt);
+        });
+
+        modelBuilder.Entity<EvaluationAcceptanceRecordEntity>(entity =>
+        {
+            entity.ToTable("evaluation_acceptance_results");
+            entity.HasKey(e => e.Id);
+            entity.Property(e => e.EvaluatedAt).HasColumnName("evaluated_at");
+            entity.Property(e => e.BaselineExperimentId)
+                .HasColumnName("baseline_experiment_id")
+                .HasMaxLength(200)
+                .IsRequired();
+            entity.Property(e => e.CandidateExperimentId)
+                .HasColumnName("candidate_experiment_id")
+                .HasMaxLength(200)
+                .IsRequired();
+            entity.Property(e => e.BaselineRunId).HasColumnName("baseline_run_id");
+            entity.Property(e => e.CandidateRunId).HasColumnName("candidate_run_id");
+            entity.Property(e => e.PolicyName)
+                .HasColumnName("policy_name")
+                .HasMaxLength(200)
+                .IsRequired();
+            entity.Property(e => e.PolicyJson)
+                .HasColumnName("policy_json")
+                .IsRequired();
+            entity.Property(e => e.Status)
+                .HasColumnName("status")
+                .HasMaxLength(20)
+                .IsRequired();
+            entity.Property(e => e.IssuesJson)
+                .HasColumnName("issues_json")
+                .IsRequired();
+            entity.Property(e => e.MetricsJson)
+                .HasColumnName("metrics_json")
+                .IsRequired();
+            entity.HasIndex(e => e.EvaluatedAt);
+            entity.HasIndex(e => e.BaselineExperimentId);
+            entity.HasIndex(e => e.CandidateExperimentId);
         });
 
         modelBuilder.Entity<EvaluationDatasetRecordEntity>(entity =>

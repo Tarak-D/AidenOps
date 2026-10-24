@@ -25,3 +25,11 @@ public interface IEvaluationStore
     Task<IReadOnlyList<ExperimentRunRecord>> ListRunsAsync(
         string? experimentId = null, string? datasetName = null, CancellationToken ct = default);
 }
+
+public sealed class EvaluationStoreUnavailableException : Exception
+{
+    public EvaluationStoreUnavailableException(string message)
+        : base(message)
+    {
+    }
+}

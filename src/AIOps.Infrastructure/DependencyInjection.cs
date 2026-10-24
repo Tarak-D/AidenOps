@@ -714,6 +714,10 @@ services.Configure<CiscoThousandEyesOptions>(
                 IEvaluationStore,
                 PostgresEvaluationStore>();
 
+            services.AddScoped<
+                IEvaluationAcceptanceStore,
+                PostgresEvaluationAcceptanceStore>();
+
                 services.AddScoped<
                 IEvaluationDatasetStore,
                 PostgresEvaluationDatasetStore>();
@@ -750,7 +754,11 @@ services.Configure<CiscoThousandEyesOptions>(
 
             services.AddSingleton<
                 IEvaluationStore,
-                PostgresEvaluationStore>();
+                UnavailableEvaluationStore>();
+
+            services.AddSingleton<
+                IEvaluationAcceptanceStore,
+                UnavailableEvaluationAcceptanceStore>();
 
             services.AddSingleton<
                 IItsmProviderSelectionStore,
