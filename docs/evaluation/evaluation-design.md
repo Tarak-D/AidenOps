@@ -1,4 +1,4 @@
-# Evaluation Design
+﻿# Evaluation Design
 
 ## Purpose
 
@@ -179,3 +179,14 @@ Keep secrets and sensitive incident data out of golden datasets and evaluation r
 ## Maintenance
 
 Update this document when source code and tests demonstrate a material change. Distinguish implemented capabilities from partial integrations and planned work. Record the relevant commit and test results when documenting a verified milestone.
+
+## Phase 15 — PostgreSQL Validation Checklist
+
+- [ ] Confirm the acceptance results table and indexes match the EF Core mapping.
+- [ ] Verify that acceptance decisions persist with their experiment and run identifiers.
+- [ ] Verify persistence of passed, failed, and blocked decisions.
+- [ ] Verify API authorization and behavior when acceptance policy configuration is invalid.
+- [ ] Record live PostgreSQL validation results before enabling release enforcement.
+
+Live PostgreSQL persistence validation remains pending until these checks are executed.
+
