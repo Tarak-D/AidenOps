@@ -137,6 +137,10 @@ endpoint remains read-only and retains its pairwise trend-report semantics.
 Acceptance requests do not invoke Python agents or operational tools. This
 batch adds no CI/release enforcement.
 
+The ordinary CI workflow is not an independently trusted regression
+evaluator. See [Trusted regression evaluation](trusted-regression-evaluation.md)
+for the trust boundary and prerequisites for future enforcement.
+
 ## Run configuration and safety
 
 The .NET evaluation run configuration includes:
