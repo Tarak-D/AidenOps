@@ -1,0 +1,84 @@
+name: CI
+
+on:
+  pull_request:
+    branches:
+      - master
+  push:
+    branches:
+      - master
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    services:
+      postgres:
+        image: pgvector/pgvector:pg15
+        env:
+          POSTGRES_DB: aios
+          POSTGRES_USER: aios
+          POSTGRES_PASSWORD: aiospw
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U aios -d aios"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+    env:
+      ConnectionStrings__PostgresConnection: Host=localhost;Port=5432;Database=aios;Username=aios;Password=aiospw
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          global-json-file: global.json
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install Python dependencies
+        run: python -m pip install -r python/requirements.txt
+
+      - name: Run Python tests
+        working-directory: python
+        env:
+          AGENT_LLM_PROVIDER: deterministic
+        run: python -m pytest -q
+
+      - name: Restore .NET solution
+        run: dotnet restore AIOps.slnx
+
+      - name: Build .NET solution
+        run: dotnet build AIOps.slnx --no-restore
+
+      - name: Apply PostgreSQL test schemas
+        env:
+          POSTGRES_CONTAINER_ID: ${{ job.services.postgres.id }}
+        run: |
+          for schema in \
+            PostgreSQL-Main.sql \
+            PostgreSQL-Persistence.sql \
+            PostgreSQL-Phase6.sql \
+            PostgreSQL-Phase7.sql \
+            PostgreSQL-Phase14-Batch1.sql \
+            PostgreSQL-Phase14-Batch2.sql \
+            PostgreSQL-Phase14-Batch3.sql \
+            PostgreSQL-Phase15-Batch2-Runs.sql \
+            PostgreSQL-Phase15-Batch2.sql
+          do
+            docker exec -i "$POSTGRES_CONTAINER_ID" \
+              psql -v ON_ERROR_STOP=1 -U aios -d aios < "$schema"
+          done
+
+      - name: Run .NET tests
+        run: dotnet test AIOps.slnx --no-build --no-restore

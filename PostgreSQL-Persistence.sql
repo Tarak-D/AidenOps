@@ -1,3 +1,32 @@
+-- Append-only platform audit records; matches AuditRecordEntity and AIOpsDbContext.
+CREATE TABLE IF NOT EXISTS audit_records
+(
+    id uuid NOT NULL,
+    correlation_id uuid NOT NULL,
+    actor_type integer NOT NULL,
+    actor_id character varying(200) NOT NULL,
+    event_type character varying(100) NOT NULL,
+    entity_type character varying(100) NOT NULL,
+    entity_id character varying(200) NOT NULL,
+    payload_json text NOT NULL,
+    occurred_at timestamp with time zone NOT NULL,
+    sequence bigint NOT NULL,
+
+    CONSTRAINT pk_audit_records PRIMARY KEY (id)
+);
+
+CREATE INDEX IF NOT EXISTS ix_audit_records_entity_type
+    ON audit_records (entity_type);
+
+CREATE INDEX IF NOT EXISTS ix_audit_records_entity_id
+    ON audit_records (entity_id);
+
+CREATE INDEX IF NOT EXISTS ix_audit_records_actor_id
+    ON audit_records (actor_id);
+
+CREATE INDEX IF NOT EXISTS ix_audit_records_occurred_at
+    ON audit_records (occurred_at);
+
 CREATE TABLE OrleansStorage
 (
     grainidhash integer NOT NULL,

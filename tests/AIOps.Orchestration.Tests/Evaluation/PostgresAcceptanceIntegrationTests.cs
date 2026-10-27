@@ -1,5 +1,7 @@
 using System.Text.Json;
 using AIOps.Abstractions.Evaluation;
+using AIOps.Contracts.AgentGateway;
+using AIOps.Domain;
 using AIOps.Infrastructure.Agents;
 using AIOps.Infrastructure.EfCore;
 using AIOps.Infrastructure.Evaluation;
@@ -32,30 +34,54 @@ public sealed class PostgresAcceptanceIntegrationTests
 
         await using var context = new AIOpsDbContext(options);
 
-        var originalRunCount = await context.EvaluationRuns.LongCountAsync();
-        var originalAcceptanceCount =
-            await context.EvaluationAcceptanceResults.LongCountAsync();
+        var testScope = $"phase15-b3-postgres-{Guid.NewGuid():N}";
+        var datasetMetadata = new EvaluationDatasetMetadata(
+            $"{testScope}-dataset",
+            "Golden Incident Dataset",
+            "1.0.0",
+            "Isolated Phase 15 PostgreSQL acceptance integration fixture.");
+        var baselineExperimentId = $"{testScope}-baseline";
+        var candidateExperimentId = $"{testScope}-candidate";
+        Guid? acceptanceResultId = null;
 
         await using var transaction =
             await context.Database.BeginTransactionAsync();
 
         try
         {
+            var datasetCase = new EvaluationCase(
+                "database-unavailable",
+                new AgentTicketContext(
+                    Guid.NewGuid(),
+                    $"{testScope}-ticket",
+                    "Database unavailable",
+                    "The production database is unavailable.",
+                    "evaluation@example.com",
+                    TicketDomain.Unknown,
+                    Severity.P3,
+                    TicketStatus.New),
+                Array.Empty<ToolManifestEntry>(),
+                TicketDomain.Database,
+                Severity.P1,
+                AgentRunOutcome.Escalated,
+                null,
+                "Escalate because no database remediation tool is available.",
+                ExpectedApprovalRequired: false);
+            var fixtureDataset = new EvaluationDataset(
+                datasetMetadata.Name,
+                datasetMetadata.Version,
+                [datasetCase]);
             var datasetStore =
                 new PostgresEvaluationDatasetStore(context);
-            var persistedDatasets = await datasetStore.ListAsync();
-            var selectedDataset = persistedDatasets
-                .Where(record =>
-                    record.Metadata.Name == "Golden Incident Dataset" &&
-                    record.Metadata.Version == "1.0.0")
-                .OrderBy(record => record.Metadata.DatasetId, StringComparer.Ordinal)
-                .FirstOrDefault();
-            if (selectedDataset is null)
-            {
-                throw new Xunit.Sdk.XunitException(
-                    "No persisted Golden Incident Dataset version 1.0.0 was found.");
-            }
 
+            await datasetStore.SaveAsync(
+                datasetMetadata,
+                fixtureDataset);
+
+            var selectedDataset = await datasetStore.GetAsync(
+                datasetMetadata.DatasetId,
+                datasetMetadata.Version);
+            Assert.NotNull(selectedDataset);
             Assert.Single(selectedDataset.Dataset.Cases);
             var dataset = selectedDataset.Dataset;
 
@@ -66,12 +92,9 @@ public sealed class PostgresAcceptanceIntegrationTests
                 new InProcessFakeAgentGateway(),
                 evaluationStore);
 
-            var testScope = $"phase15-b2-postgres-{Guid.NewGuid():N}";
-            var baselineExperimentId = $"{testScope}-baseline";
-            var candidateExperimentId = $"{testScope}-candidate";
             const string modelType = "deterministic_test";
             const string modelName = "InProcessFakeAgentGateway";
-            const string promptVersion = "phase15-b2-integration-v1";
+            const string promptVersion = "phase15-b3-integration-v1";
 
             var baselineSummary = await runner.RunAsync(
                 dataset,
@@ -152,6 +175,7 @@ public sealed class PostgresAcceptanceIntegrationTests
             var decision = await acceptanceService.EvaluateAndPersistAsync(
                 baselineExperimentId,
                 candidateExperimentId);
+            acceptanceResultId = decision.ResultId;
 
             Assert.Equal(
                 EvaluationAcceptanceStatus.Passed,
@@ -189,12 +213,20 @@ public sealed class PostgresAcceptanceIntegrationTests
             await transaction.RollbackAsync();
             context.ChangeTracker.Clear();
 
-            Assert.Equal(
-                originalRunCount,
-                await context.EvaluationRuns.LongCountAsync());
-            Assert.Equal(
-                originalAcceptanceCount,
-                await context.EvaluationAcceptanceResults.LongCountAsync());
+            Assert.False(
+                await context.EvaluationDatasets.AnyAsync(
+                    dataset => dataset.DatasetId == datasetMetadata.DatasetId));
+            Assert.False(
+                await context.EvaluationRuns.AnyAsync(
+                    run => run.ExperimentId == baselineExperimentId ||
+                           run.ExperimentId == candidateExperimentId));
+
+            if (acceptanceResultId is Guid resultId)
+            {
+                Assert.False(
+                    await context.EvaluationAcceptanceResults.AnyAsync(
+                        result => result.Id == resultId));
+            }
         }
     }
 }
