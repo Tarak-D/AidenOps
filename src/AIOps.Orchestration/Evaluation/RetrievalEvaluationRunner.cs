@@ -20,7 +20,7 @@ public sealed class RetrievalEvaluationRunner
         _timeProvider = timeProvider ?? TimeProvider.System;
     }
 
-    public async Task<RetrievalEvaluationSummary> RunAsync(
+    public Task<RetrievalEvaluationSummary> RunAsync(
         string datasetId,
         string datasetName,
         string datasetVersion,
@@ -29,7 +29,68 @@ public sealed class RetrievalEvaluationRunner
         int? maxCases = null,
         CancellationToken cancellationToken = default)
     {
+        return RunCoreAsync(
+            datasetId,
+            datasetName,
+            datasetVersion,
+            cases,
+            experimentId,
+            maxCases,
+            cancellationToken,
+            knowledgeCorpus: null);
+    }
+
+    public Task<RetrievalEvaluationSummary> RunAsync(
+        EvaluationKnowledgeCorpus knowledgeCorpus,
+        IReadOnlyList<RetrievalEvaluationCase> cases,
+        string experimentId,
+        int? maxCases = null,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(knowledgeCorpus);
         ArgumentNullException.ThrowIfNull(cases);
+
+        knowledgeCorpus.Validate();
+
+        var corpusDocumentIds = knowledgeCorpus.Documents
+            .Select(corpusDocument => corpusDocument.Document.Id)
+            .ToHashSet();
+
+        if (cases.Any(evaluationCase =>
+                evaluationCase is null ||
+                evaluationCase.ExpectedDocumentIds is null ||
+                evaluationCase.ExpectedDocumentIds.Any(
+                    documentId => !corpusDocumentIds.Contains(documentId))))
+        {
+            throw new ArgumentException(
+                "Every retrieval evaluation case must reference documents in the knowledge corpus.",
+                nameof(cases));
+        }
+
+        return RunCoreAsync(
+            knowledgeCorpus.CorpusId,
+            knowledgeCorpus.CorpusId,
+            knowledgeCorpus.Version,
+            cases,
+            experimentId,
+            maxCases,
+            cancellationToken,
+            knowledgeCorpus);
+    }
+
+    private async Task<RetrievalEvaluationSummary> RunCoreAsync(
+        string datasetId,
+        string datasetName,
+        string datasetVersion,
+        IReadOnlyList<RetrievalEvaluationCase> cases,
+        string experimentId,
+        int? maxCases,
+        CancellationToken cancellationToken,
+        EvaluationKnowledgeCorpus? knowledgeCorpus)
+    {
+        ArgumentNullException.ThrowIfNull(cases);
+
+        var knowledgeCorpusSha256 = knowledgeCorpus?.ComputeSha256();
 
         if (string.IsNullOrWhiteSpace(datasetId))
         {
@@ -107,18 +168,28 @@ public sealed class RetrievalEvaluationRunner
             Cases = caseResults
         };
 
-        var configuration = new
+        var configuration = new Dictionary<string, object?>
         {
-            DatasetId = datasetId,
-            DatasetName = datasetName,
-            DatasetVersion = datasetVersion,
-            ExecutionMode = "knowledge-store-retrieval",
-            MaxCases = maxCases,
-            TopK = selectedCases
+            ["DatasetId"] = datasetId,
+            ["DatasetName"] = datasetName,
+            ["DatasetVersion"] = datasetVersion,
+            ["ExecutionMode"] = "knowledge-store-retrieval",
+            ["MaxCases"] = maxCases,
+            ["TopK"] = selectedCases
                 .Select(c => c.TopK)
                 .Distinct()
                 .ToArray()
         };
+
+        if (knowledgeCorpus is not null)
+        {
+            configuration["KnowledgeCorpusId"] =
+                knowledgeCorpus.CorpusId;
+            configuration["KnowledgeCorpusVersion"] =
+                knowledgeCorpus.Version;
+            configuration["KnowledgeCorpusSha256"] =
+                knowledgeCorpusSha256;
+        }
 
         var run = new ExperimentRunRecord(
             Guid.NewGuid(),

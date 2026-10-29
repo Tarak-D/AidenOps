@@ -122,13 +122,19 @@ configuration is verified by repository code. Until these administrator-owned
 controls and the trusted runner exist, this remains a documented future
 contract; acceptance enforcement must remain disabled.
 
-## Next implementation stage
+## Remaining application-repository work
 
-The next application-repository milestone is to establish and review the
-versioned evaluation fixture and populated knowledge corpus, including their
-canonical content digests. Add focused end-to-end tests showing the actual
-deterministic Python endpoint running through `PythonAgentGateway` and
-`EvaluationRunner` against the dedicated .NET control plane. This work must
-not add acceptance thresholds or make CI claim release acceptance. Trusted
-runner integration and required-check configuration are subsequent work after
-the independent trust boundary and policy ownership have been approved.
+The application repository now includes a versioned Phase 15 evaluation
+knowledge corpus with deterministic identifiers, validation, canonical
+content hashing, and corpus provenance in the retrieval runner. These fixture
+and unit-test results do not establish end-to-end retrieval or full-agent
+behavior.
+
+The next behavior-verification step is to run the fixture in an isolated
+environment with a populated disposable PostgreSQL knowledge store, then add
+focused end-to-end tests showing the actual deterministic Python endpoint
+running through `PythonAgentGateway` and `EvaluationRunner` against the
+dedicated .NET control plane. Do not add acceptance thresholds or claim CI
+release acceptance as part of that work. Trusted runner integration and
+required-check configuration remain subsequent work after the independent
+trust boundary and policy ownership have been approved.

@@ -71,6 +71,41 @@ This is an estimate based on configured prices and reported token counts, not ne
 
 The source includes a retrieval evaluation runner. Review its metrics and test coverage before documenting individual retrieval metrics or claiming complete retrieval-quality reporting.
 
+#### Versioned Phase 15 knowledge corpus
+
+`Phase15KnowledgeCorpus` provides a small evaluation fixture with corpus ID
+`phase-15-knowledge`, version `1.0.0`, three authored knowledge documents, and
+two ordered chunks per document. Document and chunk GUIDs and fixture ordering
+are explicit and stable. The material contains general incident-triage
+guidance, not production knowledge data or expected full-agent outcomes.
+
+`EvaluationKnowledgeCorpus.Validate()` rejects missing corpus metadata, an
+empty corpus, missing document or chunk fields, empty documents/chunk lists,
+duplicate document or chunk IDs, chunks assigned to another document, and
+non-contiguous or out-of-order chunk indexes.
+
+`ComputeSha256()` hashes compact UTF-8 JSON with a fixed property order and
+format version. It includes the corpus ID/version, the documents in fixture
+order, each document's IDs and fields, and each ordered chunk's IDs, index,
+content, and metadata. The resulting uppercase SHA-256 digest is deterministic
+for identical corpus data; changing content, metadata, IDs, version, or order
+changes the digest. A content or ordering change requires review and an
+intentional corpus version update.
+
+The corpus-aware `RetrievalEvaluationRunner.RunAsync` overload records corpus
+ID, version, and digest in the persisted run configuration and rejects cases
+that refer to documents outside that corpus. It queries the supplied
+`IKnowledgeStore`; it does not populate or modify that store. Evaluation users
+must provision the fixture explicitly in a dedicated disposable knowledge
+store before running retrieval evaluation, and should use the same verified
+corpus bytes for baseline and candidate runs.
+
+Fixture review and deterministic unit tests establish the authored corpus
+shape and hashing behavior only. They do not verify retrieval quality against a
+populated PostgreSQL database or full-agent behavior through the actual .NET
+service. No acceptance threshold, metric direction, or release policy is
+defined by this fixture.
+
 ### Deterministic acceptance-gate core
 
 The .NET evaluation core supports an explicit acceptance policy with required
@@ -193,4 +228,3 @@ Update this document when source code and tests demonstrate a material change. D
 - [ ] Record live PostgreSQL validation results before enabling release enforcement.
 
 Live PostgreSQL persistence validation remains pending until these checks are executed.
-

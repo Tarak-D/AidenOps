@@ -1,6 +1,7 @@
 using AIOps.Abstractions.Evaluation;
 using AIOps.Abstractions.Knowledge;
 using AIOps.Orchestration.Evaluation;
+using System.Text.Json;
 
 namespace AIOps.Orchestration.Tests.Evaluation;
 
@@ -88,6 +89,72 @@ public sealed class RetrievalEvaluationRunnerTests
         Assert.Contains(
             "\"MeanReciprocalRank\":0.5",
             summary.Run.MetricsJson);
+    }
+
+    [Fact]
+    public async Task RunAsync_with_knowledge_corpus_records_provenance_without_seeding_store()
+    {
+        var corpus = Phase15KnowledgeCorpus.Create();
+        var expectedDocumentId = corpus.Documents[0].Document.Id;
+        var knowledgeStore = new FakeKnowledgeStore(
+        [
+            CreateResult(
+                expectedDocumentId,
+                "Expected",
+                0.95)
+        ]);
+        var evaluationStore = new FakeEvaluationStore();
+        var runner = new RetrievalEvaluationRunner(
+            knowledgeStore,
+            evaluationStore);
+
+        var summary = await runner.RunAsync(
+            corpus,
+            [
+                new RetrievalEvaluationCase(
+                    "network-connectivity",
+                    "How should a network connectivity incident be triaged?",
+                    [expectedDocumentId])
+            ],
+            "experiment-corpus-001");
+
+        using var configuration = JsonDocument.Parse(summary.Run.ConfigJson);
+        var config = configuration.RootElement;
+
+        Assert.Equal(corpus.CorpusId, summary.Run.DatasetName);
+        Assert.Equal(corpus.Version, summary.Run.DatasetVersion);
+        Assert.Equal(
+            corpus.ComputeSha256(),
+            config.GetProperty("KnowledgeCorpusSha256").GetString());
+        Assert.Equal(
+            corpus.CorpusId,
+            config.GetProperty("KnowledgeCorpusId").GetString());
+        Assert.Equal(
+            corpus.Version,
+            config.GetProperty("KnowledgeCorpusVersion").GetString());
+        Assert.Equal(1, knowledgeStore.SearchCount);
+        Assert.Equal(0, knowledgeStore.SaveCount);
+        Assert.Single(evaluationStore.Runs);
+    }
+
+    [Fact]
+    public async Task RunAsync_with_knowledge_corpus_rejects_case_documents_outside_corpus()
+    {
+        var corpus = Phase15KnowledgeCorpus.Create();
+        var runner = new RetrievalEvaluationRunner(
+            new FakeKnowledgeStore([]),
+            new FakeEvaluationStore());
+
+        await Assert.ThrowsAsync<ArgumentException>(() =>
+            runner.RunAsync(
+                corpus,
+                [
+                    new RetrievalEvaluationCase(
+                        "outside-corpus",
+                        "query",
+                        [Guid.NewGuid()])
+                ],
+                "experiment-corpus-002"));
     }
 
     [Fact]
@@ -302,12 +369,14 @@ public sealed class RetrievalEvaluationRunnerTests
         }
 
         public int SearchCount { get; private set; }
+        public int SaveCount { get; private set; }
 
         public Task SaveDocumentAsync(
             KnowledgeDocument document,
             IReadOnlyList<KnowledgeChunk> chunks,
             CancellationToken cancellationToken = default)
         {
+            SaveCount++;
             return Task.CompletedTask;
         }
 
