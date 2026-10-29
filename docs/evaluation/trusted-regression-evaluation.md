@@ -128,13 +128,23 @@ The application repository now includes a versioned Phase 15 evaluation
 knowledge corpus with deterministic identifiers, validation, canonical
 content hashing, and corpus provenance in the retrieval runner. These fixture
 and unit-test results do not establish end-to-end retrieval or full-agent
-behavior.
+behavior. A read-only check on 2026-10-29 found that the existing PostgreSQL
+container had no knowledge documents or chunks, so no corpus was seeded there.
+The opt-in PostgreSQL integration test requires a separately configured host,
+port, and `aios_phase15_test` database, and was not run in that environment.
+Its evaluation-run store is in-memory; repeated calls compare retrieved
+document/chunk IDs, similarity values, and returned corpus provenance for the
+same runner build. This does not verify PostgreSQL run persistence or
+reproducibility across distinct source revisions.
 
-The next behavior-verification step is to run the fixture in an isolated
-environment with a populated disposable PostgreSQL knowledge store, then add
-focused end-to-end tests showing the actual deterministic Python endpoint
-running through `PythonAgentGateway` and `EvaluationRunner` against the
-dedicated .NET control plane. Do not add acceptance thresholds or claim CI
-release acceptance as part of that work. Trusted runner integration and
-required-check configuration remain subsequent work after the independent
-trust boundary and policy ownership have been approved.
+The next behavior-verification step is to provision the reviewed corpus in an
+isolated disposable PostgreSQL database and run the transaction-scoped
+retrieval integration test. The same corpus and ordered retrieval cases can
+then be used to compare separate baseline and candidate retrieval-runner
+builds, but source-revision provenance and automated comparison are not yet
+implemented. Add focused end-to-end tests for the actual deterministic Python
+endpoint through `PythonAgentGateway` and `EvaluationRunner` only after that
+database-backed stage. Do not add acceptance thresholds or claim CI release
+acceptance as part of this work. Trusted runner integration and required-check
+configuration remain subsequent work after the independent trust boundary and
+policy ownership have been approved.

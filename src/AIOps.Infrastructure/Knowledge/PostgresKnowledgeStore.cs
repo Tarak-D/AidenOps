@@ -113,6 +113,9 @@ public sealed class PostgresKnowledgeStore : IKnowledgeStore
                 Distance = x.Embedding!.CosineDistance(queryVector)
             })
             .OrderBy(x => x.Distance)
+            .ThenBy(x => x.DocumentId)
+            .ThenBy(x => x.ChunkIndex)
+            .ThenBy(x => x.ChunkId)
             .Take(limit)
             .ToListAsync(cancellationToken);
 

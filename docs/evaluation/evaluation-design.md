@@ -100,11 +100,53 @@ must provision the fixture explicitly in a dedicated disposable knowledge
 store before running retrieval evaluation, and should use the same verified
 corpus bytes for baseline and candidate runs.
 
-Fixture review and deterministic unit tests establish the authored corpus
-shape and hashing behavior only. They do not verify retrieval quality against a
-populated PostgreSQL database or full-agent behavior through the actual .NET
-service. No acceptance threshold, metric direction, or release policy is
-defined by this fixture.
+PostgreSQL retrieval orders equal-distance results by document ID, chunk index,
+and chunk ID after the distance sort, so ties have a stable ordering. The
+optional `Phase15KnowledgeCorpusPostgresIntegrationTests` test saves the
+fixture in a transaction, checks document/chunk retrieval and repeat-query
+ordering, and runs the same versioned corpus and retrieval cases twice. It
+compares retrieved document IDs, chunk IDs, and similarity values between the
+two calls, and checks their returned run configurations for identical corpus
+ID, version, and digest. Its `IEvaluationStore` is in-memory, so the test does
+not verify PostgreSQL persistence of evaluation runs or provenance. The two
+calls use the same runner build and do not compare baseline and candidate
+revisions.
+
+The test requires `AIOPS_PHASE15_TEST_CONNECTION`,
+`AIOPS_PHASE15_TEST_HOST`, `AIOPS_PHASE15_TEST_PORT`, and
+`AIOPS_PHASE15_TEST_DATABASE`. The configured connection must match the
+explicit host and port and the exact database name `aios_phase15_test`.
+Fixture document and chunk IDs are checked before any writes. Fixture writes
+are rolled back in a transaction; the test refuses to overwrite existing IDs.
+
+An additional ordering fixture uses identical chunk text (and therefore
+identical deterministic embeddings) across document and chunk positions. It
+raises the result limit so all three tied fixture chunks are present, then
+checks their equal cosine distance, document ID, and chunk index ordering.
+Although chunk ID remains a final sort key in the query, the schema's unique
+document-ID/chunk-index constraint prevents valid rows from tying on the
+preceding keys, so the integration test does not independently exercise the
+chunk-ID tie-breaker.
+
+At the 2026-10-29 database inspection, the existing `aios-postgres` container
+was running, but a read-only query found zero knowledge documents and zero
+chunks, including none of the corpus IDs. No fixture rows were inserted in
+that database. The PostgreSQL integration test was not run because no isolated
+`aios_phase15_test` connection was configured. Therefore the database
+retrieval path is covered by an opt-in test but has not yet been verified
+against a populated PostgreSQL database. Full-agent behavior through the
+actual .NET service also remains unverified. No acceptance threshold, metric
+direction, or release policy is defined by this fixture.
+
+The smallest safe retrieval comparison is to provision the reviewed corpus
+once in a dedicated disposable database, run baseline and candidate
+`RetrievalEvaluationRunner` builds against that unchanged corpus and the same
+ordered `Phase15KnowledgeCorpus.CreateRetrievalCases()` fixture, and compare
+their returned dataset identity/version, corpus digest, sample count, and
+retrieval outputs. Do not mix writes from either run into a shared mutable
+production store. The runner does not currently record source revision SHAs;
+revision provenance and full-agent baseline/candidate orchestration remain
+future work. No acceptance decision should be inferred from this comparison.
 
 ### Deterministic acceptance-gate core
 
