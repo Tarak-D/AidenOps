@@ -137,14 +137,24 @@ document/chunk IDs, similarity values, and returned corpus provenance for the
 same runner build. This does not verify PostgreSQL run persistence or
 reproducibility across distinct source revisions.
 
-The next behavior-verification step is to provision the reviewed corpus in an
-isolated disposable PostgreSQL database and run the transaction-scoped
-retrieval integration test. The same corpus and ordered retrieval cases can
-then be used to compare separate baseline and candidate retrieval-runner
-builds, but source-revision provenance and automated comparison are not yet
-implemented. Add focused end-to-end tests for the actual deterministic Python
-endpoint through `PythonAgentGateway` and `EvaluationRunner` only after that
-database-backed stage. Do not add acceptance thresholds or claim CI release
-acceptance as part of this work. Trusted runner integration and required-check
-configuration remain subsequent work after the independent trust boundary and
-policy ownership have been approved.
+The deterministic full-agent HTTP path is now covered by a focused test that
+starts the Python FastAPI service, exercises `/api/v1/agent/runs` through
+`PythonAgentGateway` and `EvaluationRunner`, and records two cases through an
+`IEvaluationStore` test implementation. It checks resolved and proposal
+responses, run metadata, and metrics. The .NET knowledge-search dependency is
+stubbed locally; no external tools or live LLM credentials are used. This does
+not verify the real .NET knowledge API, PostgreSQL evaluation-run persistence,
+source-revision provenance, or baseline/candidate comparison. HTTP errors,
+invalid gateway responses, and service failures are also covered as failed
+evaluation outcomes rather than successes.
+
+The next behavior-verification step is to run the full-agent test against
+`PostgresEvaluationStore` using a separately configured isolated disposable
+`aios_phase15_test` database and transaction rollback. No isolated PostgreSQL
+evaluation connection was configured for this batch, so neither PostgreSQL
+evaluation-run persistence nor PostgreSQL acceptance persistence is verified.
+The transaction-scoped retrieval test remains a separate opt-in check. Do not
+add acceptance thresholds or claim CI/release acceptance as part of this work.
+Trusted-runner integration, independent policy ownership, and required-check
+configuration remain unimplemented and require approval of the independent
+trust boundary.

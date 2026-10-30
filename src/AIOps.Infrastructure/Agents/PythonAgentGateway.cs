@@ -65,6 +65,19 @@ public sealed class PythonAgentGateway(
                     "Python agent returned an empty response.");
             }
 
+            var invalidResponse = ValidateResponse(
+                body,
+                request.CorrelationId,
+                isResumeResponse: false);
+            if (invalidResponse is not null)
+            {
+                logger.LogWarning(
+                    "Python agent returned an invalid start response for correlation {CorrelationId}: {ValidationError}.",
+                    request.CorrelationId,
+                    invalidResponse);
+                return CreateFailureResult(invalidResponse);
+            }
+
             return MapResult(body);
         }
         catch (OperationCanceledException) when (ct.IsCancellationRequested)
@@ -124,6 +137,19 @@ public sealed class PythonAgentGateway(
                     "Python agent returned an empty resume response.");
             }
 
+            var invalidResponse = ValidateResponse(
+                body,
+                request.CorrelationId,
+                isResumeResponse: true);
+            if (invalidResponse is not null)
+            {
+                logger.LogWarning(
+                    "Python agent returned an invalid resume response for correlation {CorrelationId}: {ValidationError}.",
+                    request.CorrelationId,
+                    invalidResponse);
+                return CreateFailureResult(invalidResponse);
+            }
+
             return MapResult(body);
         }
         catch (OperationCanceledException) when (ct.IsCancellationRequested)
@@ -145,6 +171,7 @@ public sealed class PythonAgentGateway(
     private static AgentRunResult MapResult(
         PythonAgentRunResponse response)
     {
+        var triage = response.Triage!;
         var outcome = response.Outcome switch
         {
             "Resolved" => AgentRunOutcome.Resolved,
@@ -157,9 +184,9 @@ public sealed class PythonAgentGateway(
 
         TicketDomain? domain = null;
 
-        if (!string.IsNullOrWhiteSpace(response.Triage.Domain) &&
+        if (!string.IsNullOrWhiteSpace(triage.Domain) &&
             Enum.TryParse<TicketDomain>(
-                response.Triage.Domain,
+                triage.Domain,
                 ignoreCase: true,
                 out var parsedDomain))
         {
@@ -168,9 +195,9 @@ public sealed class PythonAgentGateway(
 
         Severity? severity = null;
 
-        if (!string.IsNullOrWhiteSpace(response.Triage.Severity) &&
+        if (!string.IsNullOrWhiteSpace(triage.Severity) &&
             Enum.TryParse<Severity>(
-                response.Triage.Severity,
+                triage.Severity,
                 ignoreCase: true,
                 out var parsedSeverity))
         {
@@ -182,13 +209,13 @@ public sealed class PythonAgentGateway(
         if (response.ToolProposal is not null)
         {
             proposal = new ToolProposal(
-                response.ToolProposal.ToolName,
-                response.ToolProposal.ArgumentsJson,
-                response.ToolProposal.Confidence,
-                response.ToolProposal.Justification);
+                response.ToolProposal.ToolName!,
+                response.ToolProposal.ArgumentsJson!,
+                response.ToolProposal.Confidence!.Value,
+                response.ToolProposal.Justification!);
         }
 
-        var trace = response.Trace
+        var trace = response.Trace!
             .Select(
                 item => new StepTrace(
                     item.Agent,
@@ -203,7 +230,7 @@ public sealed class PythonAgentGateway(
 
         return new AgentRunResult(
             outcome,
-            response.Triage.Confidence,
+            triage.Confidence,
             domain,
             severity,
             proposal,
@@ -215,6 +242,117 @@ public sealed class PythonAgentGateway(
                 : null,
             trace,
             response.Error);
+    }
+
+    private static string? ValidateResponse(
+        PythonAgentRunResponse response,
+        Guid expectedCorrelationId,
+        bool isResumeResponse)
+    {
+        if (!Guid.TryParse(response.CorrelationId, out var correlationId) ||
+            correlationId != expectedCorrelationId)
+        {
+            return "Python agent response correlation ID did not match the request.";
+        }
+
+        var supportedOutcome = isResumeResponse
+            ? response.Outcome is "Resolved" or "Escalated"
+            : response.Outcome is "Resolved" or "Escalated" or "ProposalCreated";
+        if (!supportedOutcome)
+        {
+            return "Python agent response contained an unsupported outcome.";
+        }
+
+        if (response.Triage is null)
+        {
+            return "Python agent response omitted triage data.";
+        }
+
+        if (!isResumeResponse)
+        {
+            var hasDomain = Enum.TryParse<TicketDomain>(
+                response.Triage.Domain,
+                ignoreCase: true,
+                out var domain);
+            var hasSeverity = Enum.TryParse<Severity>(
+                response.Triage.Severity,
+                ignoreCase: true,
+                out var severity);
+            if (string.IsNullOrWhiteSpace(response.Triage.Domain) ||
+                !hasDomain ||
+                !Enum.IsDefined(domain) ||
+                string.IsNullOrWhiteSpace(response.Triage.Severity) ||
+                !hasSeverity ||
+                !Enum.IsDefined(severity) ||
+                response.Triage.Confidence is not double confidence ||
+                !double.IsFinite(confidence) ||
+                confidence is < 0 or > 1)
+            {
+                return "Python agent response contained invalid triage data.";
+            }
+        }
+
+        if (response.Trace is null ||
+            response.Trace.Any(trace =>
+                trace is null ||
+                string.IsNullOrWhiteSpace(trace.Agent) ||
+                string.IsNullOrWhiteSpace(trace.Step) ||
+                string.IsNullOrWhiteSpace(trace.Model) ||
+                string.IsNullOrWhiteSpace(trace.PromptVersion) ||
+                string.IsNullOrWhiteSpace(trace.Summary) ||
+                trace.PromptTokens < 0 ||
+                trace.CompletionTokens < 0 ||
+                !double.IsFinite(trace.LatencyMs) ||
+                trace.LatencyMs < 0))
+        {
+            return "Python agent response contained invalid trace data.";
+        }
+
+        if (response.ToolProposal is not null)
+        {
+            if (isResumeResponse ||
+                response.Outcome != "ProposalCreated")
+            {
+                return "Python agent response included a proposal for an outcome that does not carry one.";
+            }
+
+            if (string.IsNullOrWhiteSpace(response.ToolProposal.ToolName) ||
+                string.IsNullOrWhiteSpace(response.ToolProposal.Justification) ||
+                response.ToolProposal.Confidence is not double proposalConfidence ||
+                !double.IsFinite(proposalConfidence) ||
+                proposalConfidence is < 0 or > 1 ||
+                !IsJsonObject(response.ToolProposal.ArgumentsJson))
+            {
+                return "Python agent response contained an invalid tool proposal.";
+            }
+        }
+
+        if (response.Outcome == "ProposalCreated" &&
+            response.ToolProposal is null)
+        {
+            return "Python agent response reported a proposal without proposal data.";
+        }
+
+        return null;
+    }
+
+    private static bool IsJsonObject(string? json)
+    {
+        if (json is null)
+        {
+            return false;
+        }
+
+        try
+        {
+            using var document = System.Text.Json.JsonDocument.Parse(json);
+            return document.RootElement.ValueKind ==
+                System.Text.Json.JsonValueKind.Object;
+        }
+        catch (System.Text.Json.JsonException)
+        {
+            return false;
+        }
     }
 
     private static AgentRunResult CreateFailureResult(
@@ -340,13 +478,13 @@ public sealed class PythonAgentGateway(
         public string Outcome { get; set; } = "Failed";
 
         [JsonPropertyName("triage")]
-        public PythonTriageResponse Triage { get; set; } = new();
+        public PythonTriageResponse? Triage { get; set; }
 
         [JsonPropertyName("tool_proposal")]
         public PythonToolProposalResponse? ToolProposal { get; set; }
 
         [JsonPropertyName("trace")]
-        public List<PythonTraceResponse> Trace { get; set; } = [];
+        public List<PythonTraceResponse>? Trace { get; set; }
 
         [JsonPropertyName("error")]
         public string? Error { get; set; }
@@ -355,28 +493,28 @@ public sealed class PythonAgentGateway(
     private sealed class PythonTriageResponse
     {
         [JsonPropertyName("domain")]
-        public string Domain { get; set; } = "Unknown";
+        public string? Domain { get; set; }
 
         [JsonPropertyName("severity")]
-        public string Severity { get; set; } = "P3";
+        public string? Severity { get; set; }
 
         [JsonPropertyName("confidence")]
-        public double Confidence { get; set; }
+        public double? Confidence { get; set; }
     }
 
     private sealed class PythonToolProposalResponse
     {
         [JsonPropertyName("tool_name")]
-        public string ToolName { get; set; } = "";
+        public string? ToolName { get; set; }
 
         [JsonPropertyName("arguments_json")]
-        public string ArgumentsJson { get; set; } = "{}";
+        public string? ArgumentsJson { get; set; }
 
         [JsonPropertyName("confidence")]
-        public double Confidence { get; set; }
+        public double? Confidence { get; set; }
 
         [JsonPropertyName("justification")]
-        public string Justification { get; set; } = "";
+        public string? Justification { get; set; }
     }
 
     private sealed class PythonTraceResponse

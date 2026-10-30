@@ -135,8 +135,20 @@ that database. The PostgreSQL integration test was not run because no isolated
 `aios_phase15_test` connection was configured. Therefore the database
 retrieval path is covered by an opt-in test but has not yet been verified
 against a populated PostgreSQL database. Full-agent behavior through the
-actual .NET service also remains unverified. No acceptance threshold, metric
-direction, or release policy is defined by this fixture.
+actual .NET control-plane service also remains unverified. A separate
+deterministic full-agent integration test launches the Python FastAPI service,
+then calls `/api/v1/agent/runs` over HTTP through `PythonAgentGateway` and
+`EvaluationRunner`. It evaluates one resolved case and one allowlisted tool
+proposal, confirms dataset/version, sample count, model metadata, and metrics
+in the recorded `IEvaluationStore` run, and verifies that no tool execution or
+approval resume occurs. The Python service's knowledge-search dependency is a
+local HTTP stub returning no documents; this is not a test of the .NET
+knowledge API or a populated PostgreSQL corpus. The test store is an in-memory
+contract implementation, so PostgreSQL evaluation-run persistence remains
+unverified. Gateway tests also verify that HTTP errors, transport failures,
+malformed responses, and mismatched correlation IDs produce failed results;
+the runner does not count those results as resolved. No acceptance threshold,
+metric direction, or release policy is defined by this fixture.
 
 The smallest safe retrieval comparison is to provision the reviewed corpus
 once in a dedicated disposable database, run baseline and candidate
