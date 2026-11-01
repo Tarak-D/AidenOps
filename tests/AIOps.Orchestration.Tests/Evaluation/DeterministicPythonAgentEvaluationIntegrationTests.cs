@@ -8,8 +8,13 @@ using AIOps.Abstractions.Evaluation;
 using AIOps.Contracts.AgentGateway;
 using AIOps.Domain;
 using AIOps.Infrastructure.Agents;
+using AIOps.Infrastructure.EfCore;
+using AIOps.Infrastructure.Evaluation;
 using AIOps.Orchestration.Evaluation;
+using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging.Abstractions;
+using Npgsql;
+using Pgvector.EntityFrameworkCore;
 
 namespace AIOps.Orchestration.Tests.Evaluation;
 
@@ -156,7 +161,180 @@ public sealed class DeterministicPythonAgentEvaluationIntegrationTests
         Assert.Contains("VPN", knowledgeServer.LastQuery, StringComparison.OrdinalIgnoreCase);
     }
 
-    private static EvaluationDataset CreateDataset()
+    [RequiresPhase15PostgresFact]
+    public async Task EvaluationRunner_persists_deterministic_python_agent_run_in_postgres()
+    {
+        var repositoryRoot = FindRepositoryRoot();
+        await using var knowledgeServer = new KnowledgeSearchServer();
+        await using var agentService = await PythonAgentService.StartAsync(
+            repositoryRoot,
+            knowledgeServer.BaseAddress);
+
+        using var httpClient = new HttpClient
+        {
+            BaseAddress = agentService.BaseAddress,
+            Timeout = TimeSpan.FromSeconds(30)
+        };
+        var gateway = new PythonAgentGateway(
+            httpClient,
+            NullLogger<PythonAgentGateway>.Instance);
+
+        var testScope = $"phase15-b5-postgres-{Guid.NewGuid():N}";
+        var dataset = CreateDataset($"{testScope}-dataset");
+        var configuration = new EvaluationRunConfiguration(
+            $"{testScope}-experiment",
+            new EvaluationModelMetadata(
+                "llm",
+                "deterministic/bootstrap",
+                "deterministic",
+                "local-v1",
+                "v0-deterministic"),
+            dataset.Name,
+            dataset.Version,
+            MaxCases: 2,
+            Deterministic: true,
+            ExecuteExternalTools: false,
+            Notes: "Deterministic Python agent PostgreSQL integration test.");
+
+        var options = new DbContextOptionsBuilder<AIOpsDbContext>()
+            .UseNpgsql(
+                GetPhase15TestConnectionString(),
+                npgsqlOptions => npgsqlOptions.UseVector())
+            .Options;
+
+        await using var context = new AIOpsDbContext(options);
+        await using var transaction =
+            await context.Database.BeginTransactionAsync();
+
+        try
+        {
+            var evaluationStore = new PostgresEvaluationStore(context);
+            var runner = new EvaluationRunner(gateway, evaluationStore);
+
+            var summary = await runner.RunAsync(dataset, configuration);
+            var run = summary.Run;
+
+            Assert.Equal(2, summary.Cases.Count);
+            Assert.Equal(1, summary.Metrics.TriageAccuracy);
+            Assert.Equal(1, summary.Metrics.DecisionAccuracy);
+            Assert.Equal(1, summary.Metrics.ToolSelectionAccuracy);
+            Assert.Equal(1, summary.Metrics.ToolArgumentValidity);
+            Assert.Null(summary.Metrics.ExecutionSuccessRate);
+            Assert.Equal(0.5, summary.Metrics.ResolutionRate);
+
+            var filteredByExperiment = Assert.Single(
+                await evaluationStore.ListRunsAsync(
+                    configuration.ExperimentId));
+            var filteredByDataset = Assert.Single(
+                await evaluationStore.ListRunsAsync(
+                    datasetName: dataset.Name));
+            var persistedRun = Assert.Single(
+                await evaluationStore.ListRunsAsync(
+                    configuration.ExperimentId,
+                    dataset.Name));
+
+            Assert.Equal(run.Id, filteredByExperiment.Id);
+            Assert.Equal(run.Id, filteredByDataset.Id);
+            Assert.Equal(run.Id, persistedRun.Id);
+            Assert.Equal(configuration.ExperimentId, persistedRun.ExperimentId);
+            Assert.Equal("llm", persistedRun.ModelType);
+            Assert.Equal("deterministic/bootstrap", persistedRun.ModelName);
+            Assert.Equal("v0-deterministic", persistedRun.PromptVersion);
+            Assert.Equal(dataset.Name, persistedRun.DatasetName);
+            Assert.Equal(dataset.Version, persistedRun.DatasetVersion);
+            Assert.Equal(2, persistedRun.SampleCount);
+            Assert.InRange(
+                Math.Abs((run.StartedAt - persistedRun.StartedAt).Ticks),
+                0L,
+                10L);
+            Assert.NotNull(persistedRun.FinishedAt);
+            Assert.InRange(
+                Math.Abs((run.FinishedAt!.Value - persistedRun.FinishedAt.Value).Ticks),
+                0L,
+                10L);
+            Assert.True(persistedRun.FinishedAt >= persistedRun.StartedAt);
+            Assert.Equal(configuration.Notes, persistedRun.Notes);
+
+            using var configurationJson = JsonDocument.Parse(
+                persistedRun.ConfigJson);
+            var persistedConfiguration = configurationJson.RootElement;
+            Assert.Equal(
+                dataset.Name,
+                persistedConfiguration.GetProperty("Name").GetString());
+            Assert.Equal(
+                dataset.Version,
+                persistedConfiguration.GetProperty("Version").GetString());
+            Assert.Equal(
+                "deterministic-agent-gateway",
+                persistedConfiguration.GetProperty("ExecutionMode").GetString());
+            Assert.Equal(
+                "deterministic/bootstrap",
+                persistedConfiguration.GetProperty("Model").GetProperty("Name").GetString());
+            Assert.Equal(
+                "deterministic",
+                persistedConfiguration.GetProperty("Model").GetProperty("Provider").GetString());
+            Assert.False(
+                persistedConfiguration.GetProperty("ExecuteExternalTools").GetBoolean());
+
+            using var metricsJson = JsonDocument.Parse(
+                persistedRun.MetricsJson);
+            var persistedMetrics = metricsJson.RootElement;
+            Assert.Equal(
+                2,
+                persistedMetrics.GetProperty("SampleCount").GetInt32());
+            Assert.Equal(
+                summary.Metrics.TriageAccuracy,
+                persistedMetrics.GetProperty("TriageAccuracy").GetDouble());
+            Assert.Equal(
+                summary.Metrics.DecisionAccuracy,
+                persistedMetrics.GetProperty("DecisionAccuracy").GetDouble());
+            Assert.Equal(
+                summary.Metrics.ToolSelectionAccuracy,
+                persistedMetrics.GetProperty("ToolSelectionAccuracy").GetDouble());
+            Assert.Equal(
+                summary.Metrics.ResolutionRate,
+                persistedMetrics.GetProperty("ResolutionRate").GetDouble());
+
+            var persistedCases = persistedMetrics
+                .GetProperty("Cases")
+                .EnumerateArray()
+                .ToArray();
+            Assert.Equal(2, persistedCases.Length);
+            var persistedResolvedCase = Assert.Single(
+                persistedCases,
+                result => result.GetProperty("CaseId").GetString() == "vpn-resolved");
+            Assert.Equal(
+                (int)AgentRunOutcome.Resolved,
+                persistedResolvedCase.GetProperty("FinalOutcome").GetInt32());
+            Assert.True(
+                persistedResolvedCase.GetProperty("DecisionCorrect").GetBoolean());
+            var persistedProposalCase = Assert.Single(
+                persistedCases,
+                result => result.GetProperty("CaseId").GetString() == "vpn-proposal");
+            Assert.Equal(
+                (int)AgentRunOutcome.ProposalCreated,
+                persistedProposalCase.GetProperty("FinalOutcome").GetInt32());
+            Assert.Equal(
+                "Network.RunVpnDiagnostics",
+                persistedProposalCase.GetProperty("PredictedToolName").GetString());
+            Assert.True(
+                persistedProposalCase.GetProperty("ToolArgumentsValid").GetBoolean());
+            Assert.Equal(2, knowledgeServer.RequestCount);
+        }
+        finally
+        {
+            await transaction.RollbackAsync();
+            context.ChangeTracker.Clear();
+
+            Assert.False(
+                await context.EvaluationRuns.AnyAsync(
+                    evaluationRun =>
+                        evaluationRun.ExperimentId == configuration.ExperimentId));
+        }
+    }
+
+    private static EvaluationDataset CreateDataset(
+        string name = "phase15-deterministic-python-agent")
     {
         var diagnosticTool = new ToolManifestEntry(
             "Network.RunVpnDiagnostics",
@@ -190,7 +368,7 @@ public sealed class DeterministicPythonAgentEvaluationIntegrationTests
                 ExpectedApprovalRequired: false);
 
         return new EvaluationDataset(
-            "phase15-deterministic-python-agent",
+            name,
             "1.0.0",
             [
                 CreateCase(
@@ -204,6 +382,65 @@ public sealed class DeterministicPythonAgentEvaluationIntegrationTests
                     diagnosticTool.Name,
                     AgentRunOutcome.ProposalCreated)
             ]);
+    }
+
+    private static string GetPhase15TestConnectionString()
+    {
+        const string requiredDatabase = "aios_phase15_test";
+        var connectionString = Environment.GetEnvironmentVariable(
+            "AIOPS_PHASE15_TEST_CONNECTION");
+        var expectedHost = Environment.GetEnvironmentVariable(
+            "AIOPS_PHASE15_TEST_HOST");
+        var expectedPortValue = Environment.GetEnvironmentVariable(
+            "AIOPS_PHASE15_TEST_PORT");
+        var expectedDatabase = Environment.GetEnvironmentVariable(
+            "AIOPS_PHASE15_TEST_DATABASE");
+
+        if (string.IsNullOrWhiteSpace(connectionString) ||
+            string.IsNullOrWhiteSpace(expectedHost) ||
+            string.IsNullOrWhiteSpace(expectedPortValue) ||
+            string.IsNullOrWhiteSpace(expectedDatabase) ||
+            !int.TryParse(expectedPortValue, out var expectedPort) ||
+            expectedPort is < 1 or > 65535)
+        {
+            throw new InvalidOperationException(
+                "The isolated Phase 15 PostgreSQL host, port, and database configuration is invalid.");
+        }
+
+        var connection = new NpgsqlConnectionStringBuilder(connectionString);
+        if (string.Equals(
+                connection.Database,
+                "aios",
+                StringComparison.OrdinalIgnoreCase))
+        {
+            throw new InvalidOperationException(
+                "Phase 15 PostgreSQL integration tests must not use the main aios database.");
+        }
+
+        if (!string.Equals(
+                expectedDatabase,
+                requiredDatabase,
+                StringComparison.Ordinal) ||
+            !string.Equals(
+                connection.Database,
+                requiredDatabase,
+                StringComparison.Ordinal) ||
+            !connection.ContainsKey("Host") ||
+            !connection.ContainsKey("Port") ||
+            !connection.ContainsKey("Database") ||
+            string.IsNullOrWhiteSpace(connection.Host) ||
+            connection.Host.Contains(',') ||
+            !string.Equals(
+                connection.Host,
+                expectedHost,
+                StringComparison.OrdinalIgnoreCase) ||
+            connection.Port != expectedPort)
+        {
+            throw new InvalidOperationException(
+                "The PostgreSQL connection must match the explicitly configured isolated Phase 15 host, port, and aios_phase15_test database.");
+        }
+
+        return connectionString;
     }
 
     private static string FindRepositoryRoot()
@@ -228,6 +465,25 @@ public sealed class DeterministicPythonAgentEvaluationIntegrationTests
         using var listener = new TcpListener(IPAddress.Loopback, 0);
         listener.Start();
         return ((IPEndPoint)listener.LocalEndpoint).Port;
+    }
+
+    private sealed class RequiresPhase15PostgresFactAttribute : FactAttribute
+    {
+        public RequiresPhase15PostgresFactAttribute()
+        {
+            if (new[]
+                {
+                    "AIOPS_PHASE15_TEST_CONNECTION",
+                    "AIOPS_PHASE15_TEST_HOST",
+                    "AIOPS_PHASE15_TEST_PORT",
+                    "AIOPS_PHASE15_TEST_DATABASE"
+                }.Any(name => string.IsNullOrWhiteSpace(
+                    Environment.GetEnvironmentVariable(name))))
+            {
+                Skip =
+                    "Configure the isolated Phase 15 PostgreSQL connection, host, port, and aios_phase15_test database.";
+            }
+        }
     }
 
     private sealed class RecordingEvaluationStore : IEvaluationStore
