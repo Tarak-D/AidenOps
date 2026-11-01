@@ -75,6 +75,7 @@ class GoldenDatasetEvaluator:
                 title=case.title,
                 description=case.description,
                 expected_domain=case.expected_domain,
+                case_id=case.case_id,
             )
             for case in dataset.cases
         )

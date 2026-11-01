@@ -37,11 +37,14 @@ These results are historical checkpoint results. Rerun the test suites to establ
 
 The latest recorded work includes evaluation pricing metadata, estimated token-based cost calculation, cost persistence, and regression tests.
 
-The broader evaluation roadmap still requires verification and may include:
+The classical TF-IDF + Logistic Regression baseline already exists with fixed,
+ordered training and evaluation corpora. Its metadata and aligned prediction
+report are covered by source and tests; a .NET runner records runs through the
+existing evaluation store and comparison pipeline. This does not establish a
+managed dataset registry or independent generalization study.
 
-- Versioned golden datasets.
-- Experiment and run tracking.
-- A TF-IDF + Logistic Regression baseline.
+Other evaluation roadmap work still requires verification and may include:
+
 - Expanded LLM triage and end-to-end evaluation.
 - Provider, model, and prompt comparisons.
 - Persisted regression reporting and defined metric thresholds.

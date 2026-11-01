@@ -16,6 +16,9 @@ from agent_service.evaluation.golden_dataset import (
 
 @dataclass(frozen=True)
 class ClassicalMLBaselineReport:
+    training_corpus_id: str
+    training_corpus_name: str
+    training_corpus_version: str
     dataset_id: str
     dataset_name: str
     dataset_version: str
@@ -24,9 +27,16 @@ class ClassicalMLBaselineReport:
     total_cases: int
     correct_cases: int
     accuracy: float
+    case_ids: tuple[str, ...]
+    predictions: tuple[str, ...]
+    expected_domains: tuple[str, ...]
+    confidences: tuple[float, ...]
 
     def to_dict(self) -> dict[str, object]:
         return {
+            "training_corpus_id": self.training_corpus_id,
+            "training_corpus_name": self.training_corpus_name,
+            "training_corpus_version": self.training_corpus_version,
             "dataset_id": self.dataset_id,
             "dataset_name": self.dataset_name,
             "dataset_version": self.dataset_version,
@@ -35,46 +45,105 @@ class ClassicalMLBaselineReport:
             "total_cases": self.total_cases,
             "correct_cases": self.correct_cases,
             "accuracy": self.accuracy,
+            "case_ids": list(self.case_ids),
+            "predictions": list(self.predictions),
+            "expected_domains": list(self.expected_domains),
+            "confidences": list(self.confidences),
+            "case_results": [
+                {
+                    "case_id": case_id,
+                    "predicted_domain": prediction,
+                    "expected_domain": expected,
+                    "confidence": confidence,
+                }
+                for case_id, prediction, expected, confidence in zip(
+                    self.case_ids,
+                    self.predictions,
+                    self.expected_domains,
+                    self.confidences,
+                    strict=True,
+                )
+            ],
         }
 
 
-def build_baseline_classifier() -> ClassicalMLDomainClassifier:
+def build_baseline_training_corpus() -> GoldenDataset:
+    return GoldenDataset(
+        dataset_id="phase15-classical-ml-training",
+        name="Phase 15 Classical ML Training Corpus",
+        version="1.0.0",
+        cases=(
+            GoldenDatasetCase(
+                "training-network-001",
+                "VPN failure",
+                "Corporate VPN is down.",
+                "Network",
+            ),
+            GoldenDatasetCase(
+                "training-network-002",
+                "Network outage",
+                "Office network is unavailable.",
+                "Network",
+            ),
+            GoldenDatasetCase(
+                "training-identity-001",
+                "Password reset",
+                "User needs a password reset.",
+                "Identity",
+            ),
+            GoldenDatasetCase(
+                "training-identity-002",
+                "Account locked",
+                "User account is locked.",
+                "Identity",
+            ),
+            GoldenDatasetCase(
+                "training-database-001",
+                "Database unavailable",
+                "Production database is unavailable.",
+                "Database",
+            ),
+            GoldenDatasetCase(
+                "training-database-002",
+                "SQL query failure",
+                "Production SQL query failed.",
+                "Database",
+            ),
+            GoldenDatasetCase(
+                "training-infrastructure-001",
+                "CPU spike",
+                "Production server CPU is critically high.",
+                "Infrastructure",
+            ),
+            GoldenDatasetCase(
+                "training-infrastructure-002",
+                "Disk full",
+                "Production server disk is full.",
+                "Infrastructure",
+            ),
+        ),
+    )
+
+
+def _fit_baseline_classifier(
+    training_corpus: GoldenDataset,
+) -> ClassicalMLDomainClassifier:
+    training_corpus.validate()
     classifier = ClassicalMLDomainClassifier()
 
     classifier.fit(
-        [
-            "VPN failure",
-            "Network outage",
-            "Password reset",
-            "Account locked",
-            "Database unavailable",
-            "SQL query failure",
-            "CPU spike",
-            "Disk full",
-        ],
-        [
-            "Corporate VPN is down.",
-            "Office network is unavailable.",
-            "User needs a password reset.",
-            "User account is locked.",
-            "Production database is unavailable.",
-            "Production SQL query failed.",
-            "Production server CPU is critically high.",
-            "Production server disk is full.",
-        ],
-        [
-            "Network",
-            "Network",
-            "Identity",
-            "Identity",
-            "Database",
-            "Database",
-            "Infrastructure",
-            "Infrastructure",
-        ],
+        [case.title for case in training_corpus.cases],
+        [case.description for case in training_corpus.cases],
+        [case.expected_domain for case in training_corpus.cases],
     )
 
     return classifier
+
+
+def build_baseline_classifier() -> ClassicalMLDomainClassifier:
+    return _fit_baseline_classifier(
+        build_baseline_training_corpus()
+    )
 
 
 def build_baseline_dataset() -> GoldenDataset:
@@ -136,7 +205,8 @@ def build_baseline_dataset() -> GoldenDataset:
 
 
 def run_classical_ml_baseline() -> ClassicalMLBaselineReport:
-    classifier = build_baseline_classifier()
+    training_corpus = build_baseline_training_corpus()
+    classifier = _fit_baseline_classifier(training_corpus)
     dataset = build_baseline_dataset()
 
     evaluator = GoldenDatasetEvaluator(
@@ -148,6 +218,9 @@ def run_classical_ml_baseline() -> ClassicalMLBaselineReport:
     )
 
     return ClassicalMLBaselineReport(
+        training_corpus_id=training_corpus.dataset_id,
+        training_corpus_name=training_corpus.name,
+        training_corpus_version=training_corpus.version,
         dataset_id=dataset.dataset_id,
         dataset_name=dataset.name,
         dataset_version=dataset.version,
@@ -156,4 +229,8 @@ def run_classical_ml_baseline() -> ClassicalMLBaselineReport:
         total_cases=result.total_cases,
         correct_cases=result.correct_cases,
         accuracy=result.accuracy,
+        case_ids=tuple(case.case_id for case in dataset.cases),
+        predictions=result.predictions,
+        expected_domains=result.expected_domains,
+        confidences=result.confidences,
     )

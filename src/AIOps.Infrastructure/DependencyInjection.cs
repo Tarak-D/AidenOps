@@ -846,6 +846,33 @@ services.AddHttpClient<
                 options.AgentService.TimeoutSeconds);
     });
 
+services.AddHttpClient<
+    IClassicalMlEvaluationGateway,
+    PythonClassicalMlEvaluationGateway>(
+    (serviceProvider, client) =>
+    {
+        var options =
+            serviceProvider
+                .GetRequiredService<
+                    Microsoft.Extensions.Options.IOptions<AIOptions>>()
+                .Value;
+
+        if (!Uri.TryCreate(
+                options.AgentService.BaseUrl,
+                UriKind.Absolute,
+                out var baseUri))
+        {
+            throw new InvalidOperationException(
+                $"AI:AgentService:BaseUrl is invalid: " +
+                $"{options.AgentService.BaseUrl}");
+        }
+
+        client.BaseAddress = baseUri;
+        client.Timeout =
+            TimeSpan.FromSeconds(
+                options.AgentService.TimeoutSeconds);
+    });
+
         return services;
     }
 }

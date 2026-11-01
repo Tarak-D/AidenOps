@@ -126,6 +126,13 @@ def test_golden_dataset_preserves_case_order():
         "Network",
         "Infrastructure",
     )
+    assert result.case_ids == (
+        "identity-001",
+        "network-001",
+        "infra-001",
+    )
+    assert len(result.confidences) == 3
+    assert all(0.0 <= confidence <= 1.0 for confidence in result.confidences)
 
 
 def test_golden_dataset_requires_metadata():

@@ -5,8 +5,10 @@ import json
 from agent_service.evaluation.evaluation_api import (
     LLMEvaluationRequest,
     LLMEvaluationService,
+    _to_api_dict,
     serialize_llm_evaluation_response,
 )
+from agent_service.evaluation.baseline import run_classical_ml_baseline
 from agent_service.graph import build_graph, build_resume_graph
 
 
@@ -121,6 +123,14 @@ async def evaluate_llm(
     )
 
     return serialize_llm_evaluation_response(report)
+
+
+@app.get(
+    "/api/v1/evaluation/classical-ml",
+)
+async def evaluate_classical_ml() -> dict[str, object]:
+    return _to_api_dict(run_classical_ml_baseline().to_dict())
+
 
 @app.get(
     "/health",

@@ -60,6 +60,7 @@ builder.Services.AddAIOpsSecurity(
 builder.Services.AddAIOpsInfrastructure(
     builder.Configuration);
 builder.Services.AddScoped<LlmEvaluationRunner>();
+builder.Services.AddScoped<ClassicalMlEvaluationRunner>();
 builder.Services.AddScoped<RetrievalEvaluationRunner>();
 builder.Services.AddScoped<EvaluationComparisonService>();
 builder.Services.AddScoped<EvaluationAcceptanceGate>();

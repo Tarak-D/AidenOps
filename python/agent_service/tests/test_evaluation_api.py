@@ -2,6 +2,7 @@ from fastapi.testclient import TestClient
 
 from agent_service import main
 from agent_service.agents import triage
+from agent_service.evaluation import baseline
 
 
 class FakeResponse:
@@ -131,3 +132,36 @@ def test_llm_evaluation_endpoint_requires_expected_severity():
     )
 
     assert response.status_code == 422
+
+
+def test_classical_ml_evaluation_endpoint_returns_versioned_ordered_report(
+    monkeypatch,
+):
+    report = baseline.run_classical_ml_baseline()
+    monkeypatch.setattr(
+        main,
+        "run_classical_ml_baseline",
+        lambda: report,
+    )
+
+    response = TestClient(main.app).get(
+        "/api/v1/evaluation/classical-ml"
+    )
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["trainingCorpusId"] == "phase15-classical-ml-training"
+    assert payload["trainingCorpusVersion"] == "1.0.0"
+    assert payload["datasetId"] == "phase15-classical-ml-baseline"
+    assert payload["datasetVersion"] == "1.0.0"
+    assert payload["modelType"] == "classical_ml"
+    assert payload["totalCases"] == 8
+    assert payload["accuracy"] == 1.0
+    assert payload["caseIds"] == list(report.case_ids)
+    assert payload["predictions"] == list(report.predictions)
+    assert payload["caseResults"][0] == {
+        "caseId": report.case_ids[0],
+        "predictedDomain": report.predictions[0],
+        "expectedDomain": report.expected_domains[0],
+        "confidence": report.confidences[0],
+    }

@@ -33,6 +33,27 @@ The classifier supports:
 
 This is an evaluation baseline independent of the existing LangGraph triage flow. Its existence does not by itself establish comparative performance against every LLM provider or production workload.
 
+The fixed Phase 15 baseline uses separate, ordered training and evaluation
+corpora. The training corpus is identified as
+`phase15-classical-ml-training`, version `1.0.0`; its evaluation dataset is
+`phase15-classical-ml-baseline`, version `1.0.0`. Training and evaluation case
+IDs are distinct. Evaluation uses batch prediction in declared case order and
+reports aligned case IDs, expected and predicted domains, confidence,
+correct-case count, and accuracy.
+
+The Python endpoint `GET /api/v1/evaluation/classical-ml` returns this report.
+The .NET `ClassicalMlEvaluationRunner` validates the corpus, dataset, model,
+case, and metric metadata, then records an `ExperimentRunRecord` through the
+existing `IEvaluationStore`. Persisted metrics include
+`DomainClassificationAccuracy`, which the existing comparison service can
+compare when runs share the same dataset name/version and metric key.
+
+This is not a managed dataset registry or an independent generalization
+study. The small authored training and evaluation corpora have close semantic
+overlap; the baseline score is descriptive only and does not establish
+generalization to independent or production incidents. The baseline runner
+does not invoke agent workflows, operational tools, approvals, or resume.
+
 ### Persisted experiment runs
 
 The .NET evaluation contract records:
