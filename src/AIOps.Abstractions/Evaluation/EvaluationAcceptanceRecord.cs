@@ -18,6 +18,10 @@ public interface IEvaluationAcceptanceStore
     Task RecordAsync(
         EvaluationAcceptanceRecord result,
         CancellationToken cancellationToken = default);
+
+    Task<EvaluationAcceptanceRecord?> GetAsync(
+        Guid resultId,
+        CancellationToken cancellationToken = default);
 }
 
 public sealed class EvaluationAcceptancePersistenceException : Exception

@@ -27,7 +27,10 @@ public sealed class PostgresEvaluationStore : IEvaluationStore
             StartedAt = run.StartedAt,
             FinishedAt = run.FinishedAt,
             MetricsJson = run.MetricsJson,
-            Notes = run.Notes
+            Notes = run.Notes,
+            SourceRevision = run.SourceRevision,
+            DatasetSha256 = run.DatasetSha256,
+            KnowledgeCorpusSha256 = run.KnowledgeCorpusSha256
         };
 
         _context.EvaluationRuns.Add(entity);
@@ -56,7 +59,10 @@ public sealed class PostgresEvaluationStore : IEvaluationStore
                 e.StartedAt,
                 e.FinishedAt,
                 e.MetricsJson,
-                e.Notes))
+                e.Notes,
+                e.SourceRevision,
+                e.DatasetSha256,
+                e.KnowledgeCorpusSha256))
             .ToListAsync(ct);
     }
 }

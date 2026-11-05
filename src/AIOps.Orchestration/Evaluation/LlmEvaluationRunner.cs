@@ -184,7 +184,9 @@ public sealed class LlmEvaluationRunner
             finishedAt,
             JsonSerializer.Serialize(persistedMetrics),
             configuration.Notes
-                ?? $"LLM evaluation using provider '{response.Model.Provider}'.");
+                ?? $"LLM evaluation using provider '{response.Model.Provider}'.",
+            configuration.SourceRevision,
+            EvaluationInputFingerprint.ComputeSha256(dataset));
 
         await _evaluationStore.RecordRunAsync(
             run,

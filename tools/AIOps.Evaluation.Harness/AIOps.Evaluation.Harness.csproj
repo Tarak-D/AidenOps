@@ -1,0 +1,16 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\src\AIOps.Abstractions\AIOps.Abstractions.csproj" />
+    <ProjectReference Include="..\..\src\AIOps.Infrastructure\AIOps.Infrastructure.csproj" />
+    <ProjectReference Include="..\..\src\AIOps.Orchestration\AIOps.Orchestration.csproj" />
+  </ItemGroup>
+
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net10.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+  </PropertyGroup>
+
+</Project>

@@ -9,12 +9,12 @@ namespace AIOps.Infrastructure.Tests.Persistence;
 
 public sealed class PostgresEvaluationDatasetStoreTests
 {
-    [Fact]
+    [RequiresPostgresFact]
     public async Task SaveAndGetAsync_PersistsVersionedDataset()
     {
         var options = new DbContextOptionsBuilder<AIOpsDbContext>()
             .UseNpgsql(
-                "Host=localhost;Port=5432;Database=aios;Username=aios;Password=aiospw",
+                PostgresTestEnvironment.ConnectionString,
                 npgsqlOptions => npgsqlOptions.UseVector())
             .Options;
 
@@ -84,12 +84,12 @@ public sealed class PostgresEvaluationDatasetStoreTests
             savedCase.ExpectedToolName);
     }
 
-    [Fact]
+    [RequiresPostgresFact]
     public async Task ListAsync_FiltersByDatasetIdAndReturnsVersions()
     {
         var options = new DbContextOptionsBuilder<AIOpsDbContext>()
             .UseNpgsql(
-                "Host=localhost;Port=5432;Database=aios;Username=aios;Password=aiospw",
+                PostgresTestEnvironment.ConnectionString,
                 npgsqlOptions => npgsqlOptions.UseVector())
             .Options;
 
@@ -180,12 +180,12 @@ public sealed class PostgresEvaluationDatasetStoreTests
             item => item.Metadata.Version == "2.0.0");
     }
 
-    [Fact]
+    [RequiresPostgresFact]
     public async Task GetAsync_ReturnsNullForUnknownDatasetVersion()
     {
         var options = new DbContextOptionsBuilder<AIOpsDbContext>()
             .UseNpgsql(
-                "Host=localhost;Port=5432;Database=aios;Username=aios;Password=aiospw",
+                PostgresTestEnvironment.ConnectionString,
                 npgsqlOptions => npgsqlOptions.UseVector())
             .Options;
 

@@ -1,0 +1,88 @@
+.demo-evaluation-run {
+    padding-top: 1rem;
+}
+
+.demo-evaluation-run + .demo-evaluation-run {
+    margin-top: 1rem;
+    border-top: 1px solid var(--mud-palette-divider);
+}
+
+.demo-muted {
+    color: var(--mud-palette-text-secondary);
+}
+
+.demo-metrics {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.5rem;
+    margin-top: 0.65rem;
+}
+
+.demo-metric {
+    padding: 0.25rem 0.55rem;
+    border-radius: 0.35rem;
+    background: var(--mud-palette-background-grey);
+    font-size: 0.8rem;
+}
+
+.demo-timeline {
+    list-style: none;
+    margin: 1rem 0 0;
+    padding: 0;
+}
+
+.demo-timeline-entry {
+    display: grid;
+    grid-template-columns: 1rem minmax(0, 1fr);
+    gap: 0.8rem;
+    min-height: 4.25rem;
+}
+
+.demo-timeline-marker {
+    position: relative;
+    width: 0.7rem;
+    height: 0.7rem;
+    margin: 0.3rem 0 0 0.1rem;
+    border: 2px solid var(--mud-palette-primary);
+    border-radius: 50%;
+    background: var(--mud-palette-surface);
+}
+
+.demo-timeline-entry:not(:last-child) .demo-timeline-marker::after {
+    position: absolute;
+    top: 0.55rem;
+    left: 0.16rem;
+    height: 3.8rem;
+    border-left: 1px solid var(--mud-palette-divider);
+    content: "";
+}
+
+.demo-timeline-content {
+    padding-bottom: 1rem;
+}
+
+.demo-timeline-heading {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: baseline;
+    gap: 0.35rem 0.75rem;
+    margin-bottom: 0.2rem;
+}
+
+.demo-timeline-heading time {
+    color: var(--mud-palette-text-secondary);
+    font-size: 0.8rem;
+}
+
+.demo-timeline-event {
+    font-size: 0.9rem;
+    font-weight: 600;
+}
+
+.demo-api-links {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 0.3rem 0.9rem;
+    margin-top: 1.25rem;
+}

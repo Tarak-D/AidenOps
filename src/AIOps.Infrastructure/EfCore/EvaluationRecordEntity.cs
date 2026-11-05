@@ -45,4 +45,13 @@ public sealed class EvaluationRecordEntity
 
     [Column("notes")]
     public string? Notes { get; set; }
+
+    [Column("source_revision"), MaxLength(40)]
+    public string? SourceRevision { get; set; }
+
+    [Column("dataset_sha256"), MaxLength(64)]
+    public string? DatasetSha256 { get; set; }
+
+    [Column("knowledge_corpus_sha256"), MaxLength(64)]
+    public string? KnowledgeCorpusSha256 { get; set; }
 }

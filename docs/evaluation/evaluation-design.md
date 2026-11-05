@@ -214,22 +214,24 @@ configuration fields must match.
 
 Provider and model-version values are required and compared for LLM runs, but
 are self-reported persisted metadata, not independently attested provider
-identity or immutable model revision. Dataset identity/version and sample
-count are checked, but persisted run records do not include dataset case IDs
-or a content digest, so identical dataset labels/counts cannot prove identical
-case contents. Hidden runtime settings not recorded in configuration also
-cannot be verified. The gate does not infer these provenance details.
+identity or immutable model revision. The gate compares dataset
+identity/version and sample count; the revision harness additionally verifies
+the input digest saved on eligible runs against shared supplied bytes.
+Historical runs without source revision or digest provenance are not eligible
+for the harness. Hidden runtime settings not recorded in configuration also
+cannot be verified.
 
 ### Persisted acceptance decisions
 
 `POST /api/v1/evaluations/acceptance` accepts only a baseline and candidate
-experiment ID. It uses the existing `CanViewQueue` evaluation API policy and
-loads the acceptance policy from server-controlled `EvaluationAcceptance`
-configuration (`Name` and `RequiredMetrics`, each with a metric name,
-direction, and decimal allowed regression). Policy values are not accepted
-from the request. The base configuration intentionally supplies no acceptance
-thresholds; the endpoint returns `503 Service Unavailable` until a valid
-server-side policy is configured.
+experiment ID. It requires the `CanRunEvaluationAcceptance` policy
+(`Engineer` or `Admin`), while the read-only comparison endpoint retains
+`CanViewQueue`. It loads the acceptance policy from server-controlled
+`EvaluationAcceptance` configuration (`Name` and `RequiredMetrics`, each with
+a metric name, direction, and decimal allowed regression). Policy values are
+not accepted from the request. The base configuration intentionally supplies
+no acceptance thresholds; the endpoint returns `503 Service Unavailable` until
+a valid server-side policy is configured.
 
 The endpoint invokes the deterministic gate and persists every completed
 decision, including `Passed`, `Failed`, and fail-closed `Blocked` results.
@@ -245,7 +247,46 @@ than automatic EF migrations; apply the script before using the persistence
 endpoint. Existing evaluation runs are not modified or deleted. The comparison
 endpoint remains read-only and retains its pairwise trend-report semantics.
 Acceptance requests do not invoke Python agents or operational tools. This
-batch adds no CI/release enforcement.
+batch adds an application-side revision acceptance harness but does not add
+trusted CI/release enforcement.
+
+`EvaluationAcceptanceHarness` accepts distinct full baseline and candidate
+revision SHAs, explicit experiment/run IDs, and one shared set of dataset and
+optional knowledge-corpus bytes. Dataset bytes should be produced with
+`EvaluationInputFingerprint.SerializeToUtf8Bytes`; corpus bytes should come
+from `EvaluationKnowledgeCorpus.GetCanonicalBytes`. The harness hashes the
+supplied bytes and requires
+each persisted run to carry matching source revision and SHA-256 provenance.
+The .NET runners with in-memory datasets compute their dataset fingerprints
+from those inputs; Python-provided fixed-baseline runs require the caller to
+supply the reviewed dataset digest. Retrieval runs also record the versioned
+knowledge-corpus digest. Runs without complete matching provenance are
+rejected. The harness delegates the decision
+to the existing .NET `EvaluationAcceptanceService` and gate, reads the saved
+decision back, verifies its run IDs, policy, status, issues, and metrics, and
+fails unless the persisted outcome is `Passed`. Missing or ambiguous runs
+remain fail-closed `Blocked` decisions. The harness only reads persisted
+evaluation data and writes acceptance records; it does not execute operational
+tools, create approvals, or resume workflows.
+
+The harness requires a valid `EvaluationAcceptancePolicyOptions` instance from
+its caller. No default threshold is supplied. The caller must obtain that
+configuration from protected policy ownership; repository code alone does not
+make the policy trusted. Revision provenance is recorded from the evaluation
+caller and is not an independent attestation of which source was built.
+Therefore this application-side component is not itself a trusted CI runner.
+A separately controlled runner must bind the supplied revision SHA to its
+checkout/build and provide the protected policy and identical verified inputs.
+No required branch-protection status check has been configured or verified.
+
+The command-line wrapper in `tools/AIOps.Evaluation.Harness` accepts a JSON
+manifest with `baseline` and `candidate` run inputs, a policy JSON file, and
+the shared dataset file (plus `--corpus` when applicable). It requires the
+`AIOPS_EVALUATION_HARNESS_CONNECTION`, `_HOST`, `_PORT`, and `_DATABASE`
+environment variables and rejects any database other than the dedicated
+`aios_phase15_test`. It prints only the acceptance outcome and IDs or the
+failure exception type. Missing policy, database, run, provenance, or
+read-back data returns a nonzero exit code.
 
 The ordinary CI workflow is not an independently trusted regression
 evaluator. See [Trusted regression evaluation](trusted-regression-evaluation.md)

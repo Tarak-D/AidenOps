@@ -17,12 +17,12 @@ using Microsoft.Extensions.DependencyInjection.Extensions;
 namespace AIOps.Api.Tests;
 
 public sealed class EvaluationAcceptanceApiTests
-    : IClassFixture<WebApplicationFactory<Program>>
+    : IClassFixture<ApiTestWebApplicationFactory>
 {
-    private readonly WebApplicationFactory<Program> _factory;
+    private readonly ApiTestWebApplicationFactory _factory;
 
     public EvaluationAcceptanceApiTests(
-        WebApplicationFactory<Program> factory)
+        ApiTestWebApplicationFactory factory)
     {
         _factory = factory;
     }
@@ -212,7 +212,8 @@ public sealed class EvaluationAcceptanceApiTests
 
         Assert.Contains(
             authorization,
-            metadata => metadata.Policy == AuthPolicies.CanViewQueue);
+            metadata => metadata.Policy ==
+                AuthPolicies.CanRunEvaluationAcceptance);
     }
 
     private HttpClient CreateConfiguredClient(
@@ -221,9 +222,9 @@ public sealed class EvaluationAcceptanceApiTests
         bool configurePolicy = true,
         EvaluationAcceptancePolicyOptions? policyOptions = null)
     {
-        return _factory.WithWebHostBuilder(builder =>
+        var client = _factory.WithWebHostBuilder(builder =>
         {
-            builder.UseEnvironment("Test");
+            builder.UseEnvironment("Development");
             builder.ConfigureTestServices(services =>
             {
                 services.RemoveAll<IEvaluationStore>();
@@ -248,6 +249,8 @@ public sealed class EvaluationAcceptanceApiTests
                 }
             });
         }).CreateClient();
+        client.DefaultRequestHeaders.Add("X-Dev-User", "engineer");
+        return client;
     }
 
     private static EvaluationAcceptancePolicyOptions CreatePolicyOptions() =>
@@ -346,6 +349,12 @@ public sealed class EvaluationAcceptanceApiTests
             Records.Add(result);
             return Task.CompletedTask;
         }
+
+        public Task<EvaluationAcceptanceRecord?> GetAsync(
+            Guid resultId,
+            CancellationToken cancellationToken = default) =>
+            Task.FromResult(
+                Records.SingleOrDefault(record => record.Id == resultId));
     }
 
 }

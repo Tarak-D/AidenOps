@@ -60,6 +60,15 @@ public sealed class AIOpsDbContext : DbContext
             entity.Property(e => e.FinishedAt).HasColumnName("finished_at");
             entity.Property(e => e.MetricsJson).HasColumnName("metrics_json");
             entity.Property(e => e.Notes).HasColumnName("notes");
+            entity.Property(e => e.SourceRevision)
+                .HasColumnName("source_revision")
+                .HasMaxLength(40);
+            entity.Property(e => e.DatasetSha256)
+                .HasColumnName("dataset_sha256")
+                .HasMaxLength(64);
+            entity.Property(e => e.KnowledgeCorpusSha256)
+                .HasColumnName("knowledge_corpus_sha256")
+                .HasMaxLength(64);
             entity.HasIndex(e => e.ExperimentId);
             entity.HasIndex(e => e.ModelType);
             entity.HasIndex(e => e.StartedAt);

@@ -16,11 +16,11 @@ using Microsoft.Extensions.DependencyInjection.Extensions;
 
 namespace AIOps.Api.Tests;
 
-public sealed class NetworkDiagnosticProviderApiTests : IClassFixture<WebApplicationFactory<Program>>
+public sealed class NetworkDiagnosticProviderApiTests : IClassFixture<ApiTestWebApplicationFactory>
 {
-    private readonly WebApplicationFactory<Program> _factory;
+    private readonly ApiTestWebApplicationFactory _factory;
 
-    public NetworkDiagnosticProviderApiTests(WebApplicationFactory<Program> factory) => _factory = factory;
+    public NetworkDiagnosticProviderApiTests(ApiTestWebApplicationFactory factory) => _factory = factory;
 
     [Fact]
     public async Task StatusEndpointReportsSimulatedDefaultWithoutProviderSecrets()
@@ -46,7 +46,7 @@ public sealed class NetworkDiagnosticProviderApiTests : IClassFixture<WebApplica
     [InlineData("GeneralNetwork", "Datadog")]
     public async Task AdminCanSelectProviderAndStatusShowsNotConfigured(string category, string provider)
     {
-        using var client = CreateClient();
+        using var client = CreateClient("Development");
         client.DefaultRequestHeaders.Add("X-Dev-User", "admin");
         using var response = await client.PostAsJsonAsync(
             "/api/v1/integrations/network-diagnostics/provider",
@@ -62,7 +62,7 @@ public sealed class NetworkDiagnosticProviderApiTests : IClassFixture<WebApplica
     [Fact]
     public async Task CategoryProviderMismatchReturnsValidationFailureWithoutPersisting()
     {
-        using var client = CreateClient();
+        using var client = CreateClient("Development");
         client.DefaultRequestHeaders.Add("X-Dev-User", "admin");
 
         using var response = await client.PostAsJsonAsync(
@@ -90,7 +90,7 @@ public sealed class NetworkDiagnosticProviderApiTests : IClassFixture<WebApplica
         Assert.Equal("Simulated", document.RootElement.GetProperty("activeProvider").GetString());
     }
 
-    private HttpClient CreateClient(string environment = "Development") => _factory.WithWebHostBuilder(builder =>
+    private HttpClient CreateClient(string environment = "Test") => _factory.WithWebHostBuilder(builder =>
     {
         builder.UseEnvironment(environment);
         builder.ConfigureTestServices(services =>

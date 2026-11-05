@@ -7,15 +7,12 @@ namespace AIOps.Infrastructure.Tests.Knowledge;
 
 public sealed class PostgresKnowledgeStoreTests
 {
-    private const string ConnectionString =
-        "Host=localhost;Port=5432;Database=aios;Username=aios;Password=aiospw";
-
-    [Fact]
+    [RequiresPostgresFact]
     public async Task Save_and_search_returns_matching_knowledge_chunk()
     {
         var options = new DbContextOptionsBuilder<AIOpsDbContext>()
             .UseNpgsql(
-                ConnectionString,
+                PostgresTestEnvironment.ConnectionString,
                 npgsqlOptions => npgsqlOptions.UseVector())
             .Options;
 

@@ -142,6 +142,12 @@ public sealed record EvaluationKnowledgeCorpus(
 
     public string ComputeSha256()
     {
+        var bytes = GetCanonicalBytes();
+        return Convert.ToHexString(SHA256.HashData(bytes));
+    }
+
+    public byte[] GetCanonicalBytes()
+    {
         Validate();
 
         var buffer = new ArrayBufferWriter<byte>();
@@ -186,6 +192,6 @@ public sealed record EvaluationKnowledgeCorpus(
             writer.Flush();
         }
 
-        return Convert.ToHexString(SHA256.HashData(buffer.WrittenSpan));
+        return buffer.WrittenSpan.ToArray();
     }
 }

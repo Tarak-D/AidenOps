@@ -201,9 +201,7 @@ public sealed class ToolProposalValidationService
         {
             var root = arguments.RootElement;
             var schemaRoot = schema.RootElement;
-            if (schemaRoot.ValueKind != JsonValueKind.Object ||
-                !schemaRoot.TryGetProperty("type", out var type) ||
-                type.GetString() != "object")
+            if (schemaRoot.ValueKind != JsonValueKind.Object)
             {
                 throw new InvalidOperationException(
                     "Registered tool input schema must describe a JSON object.");
@@ -214,36 +212,92 @@ public sealed class ToolProposalValidationService
                 return "Tool proposal arguments must be a JSON object.";
             }
 
-            var properties = schemaRoot.GetProperty("properties");
-            foreach (var property in root.EnumerateObject())
+            if (schemaRoot.TryGetProperty("oneOf", out var alternatives))
             {
-                if (!properties.TryGetProperty(property.Name, out var propertySchema))
+                if (alternatives.ValueKind != JsonValueKind.Array ||
+                    alternatives.GetArrayLength() == 0)
                 {
-                    if (schemaRoot.TryGetProperty("additionalProperties", out var additional) &&
-                        additional.ValueKind == JsonValueKind.False)
+                    throw new InvalidOperationException(
+                        "Registered tool input schema oneOf must contain object alternatives.");
+                }
+
+                var matchingAlternatives = 0;
+                string? rejection = null;
+                foreach (var alternative in alternatives.EnumerateArray())
+                {
+                    var alternativeError = ValidateObjectArguments(root, alternative);
+                    if (alternativeError is null)
                     {
-                        return $"Unexpected tool argument '{property.Name}'.";
+                        matchingAlternatives++;
                     }
-
-                    continue;
+                    else
+                    {
+                        rejection ??= alternativeError;
+                    }
                 }
 
-                var propertyError = ValidateProperty(property.Name, property.Value, propertySchema);
-                if (propertyError is not null)
+                if (matchingAlternatives > 1)
                 {
-                    return propertyError;
+                    return "Tool proposal arguments must match exactly one registered input schema.";
                 }
+
+                return matchingAlternatives == 1
+                    ? null
+                    : rejection ?? "Tool proposal arguments do not match a registered input schema.";
             }
 
-            if (schemaRoot.TryGetProperty("required", out var required))
+            return ValidateObjectArguments(root, schemaRoot);
+        }
+    }
+
+    private static string? ValidateObjectArguments(
+        JsonElement arguments,
+        JsonElement schema)
+    {
+        if (schema.ValueKind != JsonValueKind.Object ||
+            !schema.TryGetProperty("type", out var type) ||
+            type.ValueKind != JsonValueKind.String ||
+            type.GetString() != "object")
+        {
+            throw new InvalidOperationException(
+                "Registered tool input schema must describe a JSON object.");
+        }
+
+        if (!schema.TryGetProperty("properties", out var properties) ||
+            properties.ValueKind != JsonValueKind.Object)
+        {
+            throw new InvalidOperationException(
+                "Registered object input schema must define properties.");
+        }
+
+        foreach (var property in arguments.EnumerateObject())
+        {
+            if (!properties.TryGetProperty(property.Name, out var propertySchema))
             {
-                foreach (var requiredProperty in required.EnumerateArray())
+                if (schema.TryGetProperty("additionalProperties", out var additional) &&
+                    additional.ValueKind == JsonValueKind.False)
                 {
-                    var name = requiredProperty.GetString();
-                    if (name is not null && !root.TryGetProperty(name, out _))
-                    {
-                        return $"Required tool argument '{name}' is missing.";
-                    }
+                    return $"Unexpected tool argument '{property.Name}'.";
+                }
+
+                continue;
+            }
+
+            var propertyError = ValidateProperty(property.Name, property.Value, propertySchema);
+            if (propertyError is not null)
+            {
+                return propertyError;
+            }
+        }
+
+        if (schema.TryGetProperty("required", out var required))
+        {
+            foreach (var requiredProperty in required.EnumerateArray())
+            {
+                var name = requiredProperty.GetString();
+                if (name is not null && !arguments.TryGetProperty(name, out _))
+                {
+                    return $"Required tool argument '{name}' is missing.";
                 }
             }
         }
@@ -277,6 +331,26 @@ public sealed class ToolProposalValidationService
         if (!valid)
         {
             return $"Tool argument '{name}' must be of type {typeElement.GetString()}.";
+        }
+
+        if (schema.TryGetProperty("enum", out var allowedValues))
+        {
+            if (allowedValues.ValueKind != JsonValueKind.Array ||
+                allowedValues.EnumerateArray().Any(value => value.ValueKind != JsonValueKind.String))
+            {
+                throw new InvalidOperationException(
+                    $"Registered enum schema for tool argument '{name}' must contain string values.");
+            }
+
+            if (value.ValueKind != JsonValueKind.String ||
+                !allowedValues.EnumerateArray().Any(allowedValue =>
+                    string.Equals(
+                        allowedValue.GetString(),
+                        value.GetString(),
+                        StringComparison.Ordinal)))
+            {
+                return $"Tool argument '{name}' is not one of the registered values.";
+            }
         }
 
         if (value.ValueKind == JsonValueKind.String &&

@@ -1,0 +1,228 @@
+@page "/demo"
+@inject Microsoft.JSInterop.IJSRuntime JS
+@inject Microsoft.AspNetCore.Hosting.IWebHostEnvironment HostEnvironment
+@inject ISnackbar Snackbar
+
+<PageTitle>Sandbox Demo | AIOps Agent Platform</PageTitle>
+
+<div style="padding-top: 48px; max-width: 900px;">
+    <MudText Typo="Typo.h3" GutterBottom="true">Guided sandbox demo</MudText>
+    <MudAlert Severity="Severity.Info" Variant="Variant.Outlined" Class="mb-5">
+        Python proposes. .NET validates the registered schema and policy, authorizes approvals, executes through ToolExecutor, and writes the audit trail. Both demos refuse to run unless their server-side provider is Simulated.
+    </MudAlert>
+
+    <MudCard Elevation="2" Class="mb-6">
+        <MudCardHeader>
+            <CardHeaderContent>
+                <MudText Typo="Typo.h5">Persisted evaluation results</MudText>
+                <MudText Typo="Typo.body2" Color="Color.Secondary">Read-only results from saved evaluation runs</MudText>
+            </CardHeaderContent>
+        </MudCardHeader>
+        <MudCardContent>
+            <MudText Class="mb-3">Only runs returned by the existing evaluation comparison API appear here. This panel never generates or fills in sample results.</MudText>
+            <MudButton Variant="Variant.Outlined" Disabled="@_evaluationLoading" OnClick="RefreshEvaluationResultsAsync">@(_evaluationLoading ? "Loading…" : "Refresh results")</MudButton>
+            <MudLink Href="/api/v1/evaluations/comparison" Target="_blank" Class="ml-4">Raw comparison API</MudLink>
+            @if (!string.IsNullOrWhiteSpace(_evaluationError))
+            {
+                <MudAlert Severity="Severity.Warning" Class="mt-4">@_evaluationError</MudAlert>
+            }
+            else if (_evaluationLoading)
+            {
+                <MudProgressLinear Indeterminate="true" Class="mt-4" />
+            }
+            else if (_evaluationReport is { RunCount: 0 })
+            {
+                <MudAlert Severity="Severity.Info" Class="mt-4">No persisted evaluation runs are available yet.</MudAlert>
+            }
+            else if (_evaluationReport is not null)
+            {
+                <MudText Typo="Typo.body2" Class="mt-4 mb-2">@_evaluationReport.RunCount persisted run(s) across @_evaluationReport.Datasets.Count dataset(s).</MudText>
+                @foreach (var dataset in _evaluationReport.Datasets)
+                {
+                    <MudPaper Outlined="true" Class="pa-4 mt-3">
+                        <MudText Typo="Typo.subtitle1">@dataset.DatasetName <MudText Typo="Typo.body2" Inline="true" Color="Color.Secondary">v@dataset.DatasetVersion</MudText></MudText>
+                        @foreach (var run in dataset.Runs)
+                        {
+                            <div class="demo-evaluation-run">
+                                <MudText Typo="Typo.subtitle2">@run.ModelName <span class="demo-muted">(@run.ModelType)</span></MudText>
+                                <MudText Typo="Typo.caption" Color="Color.Secondary">
+                                    @if (!string.IsNullOrWhiteSpace(run.Provider)) { <span>@run.Provider · </span> }
+                                    @run.SampleCount sample(s) · Started @run.StartedAt.ToLocalTime().ToString("g")
+                                    @if (run.FinishedAt is not null) { <span> · Finished @run.FinishedAt.Value.ToLocalTime().ToString("g")</span> }
+                                </MudText>
+                                @if (run.Metrics.Count > 0)
+                                {
+                                    <div class="demo-metrics">
+                                        @foreach (var metric in run.Metrics.OrderBy(item => item.Key, StringComparer.OrdinalIgnoreCase))
+                                        {
+                                            <span class="demo-metric"><strong>@metric.Key</strong>: @metric.Value.ToString("G4", System.Globalization.CultureInfo.InvariantCulture)</span>
+                                        }
+                                    </div>
+                                }
+                                else
+                                {
+                                    <MudText Typo="Typo.caption" Color="Color.Secondary">No numeric metrics were persisted for this run.</MudText>
+                                }
+                            </div>
+                        }
+                    </MudPaper>
+                }
+            }
+        </MudCardContent>
+    </MudCard>
+
+    <MudCard Elevation="2">
+        <MudCardHeader><CardHeaderContent><MudText Typo="Typo.h5">VPN connectivity investigation</MudText><MudText Typo="Typo.body2" Color="Color.Secondary">Read-only simulated diagnostic</MudText></CardHeaderContent></MudCardHeader>
+        <MudCardContent>
+            <MudText Class="mb-4">Creates a deterministic VPN incident and invokes the existing agent-run lifecycle.</MudText>
+            <MudButton Variant="Variant.Filled" Color="Color.Primary" Disabled="@_vpnRunning" OnClick="RunVpnDemoAsync">@(_vpnRunning ? "Running…" : "Run sandbox incident")</MudButton>
+            @if (!string.IsNullOrWhiteSpace(_vpnError)) { <MudAlert Severity="Severity.Error" Class="mt-4">@_vpnError</MudAlert> }
+            @if (_vpnResult is not null)
+            {
+                <MudAlert Severity="Severity.Success" Class="mt-4">@_vpnResult.Outcome · @_vpnResult.ProposedTool · @_vpnResult.Summary</MudAlert>
+                <MudButton Variant="Variant.Outlined" Class="mt-3" Href="@_vpnResult.TicketApiUrl" Target="_blank">View ticket activity API</MudButton>
+            }
+        </MudCardContent>
+    </MudCard>
+
+    <MudCard Elevation="2" Class="mt-6">
+        <MudCardHeader><CardHeaderContent><MudText Typo="Typo.h5">Approval and execution lifecycle</MudText><MudText Typo="Typo.body2" Color="Color.Secondary">Simulated cloud restart · Moderate risk · approval required</MudText></CardHeaderContent></MudCardHeader>
+        <MudCardContent>
+            <MudText Class="mb-4">The registered <code>Cloud.RestartInstance</code> tool changes infrastructure, so the server persists an approval request before it can execute. No real cloud operation is allowed by this demo.</MudText>
+            <MudButton Variant="Variant.Filled" Color="Color.Warning" Disabled="@(_approvalRunning || _decisionRunning)" OnClick="StartApprovalDemoAsync">@(_approvalRunning ? "Creating approval…" : "Start approval scenario")</MudButton>
+            @if (!string.IsNullOrWhiteSpace(_approvalError)) { <MudAlert Severity="Severity.Error" Class="mt-4">@_approvalError</MudAlert> }
+        </MudCardContent>
+    </MudCard>
+
+    @if (_approvalResult is not null)
+    {
+        <MudCard Elevation="2" Class="mt-6">
+            <MudCardHeader><CardHeaderContent><MudText Typo="Typo.h5">Persisted approval state</MudText><MudText Typo="Typo.body2" Color="Color.Secondary">Existing approval, resume, and audit APIs</MudText></CardHeaderContent></MudCardHeader>
+            <MudCardContent>
+                <MudGrid>
+                    <MudItem xs="12" md="6"><MudText Typo="Typo.subtitle2">Proposed action</MudText><MudText>@_approvalResult.ProposedTool</MudText></MudItem>
+                    <MudItem xs="12" md="6"><MudText Typo="Typo.subtitle2">Approval</MudText><MudChip T="string" Color="@ApprovalColor">@_approvalResult.ApprovalStatus</MudChip></MudItem>
+                    <MudItem xs="12"><MudText Typo="Typo.subtitle2">Why approval is required</MudText><MudText>@_approvalResult.Explanation</MudText></MudItem>
+                    <MudItem xs="12"><MudText Typo="Typo.subtitle2">Execution state</MudText><MudText>@_approvalResult.ExecutionState</MudText></MudItem>
+                </MudGrid>
+                @if (_approvalResult.CanDecide)
+                {
+                    <MudAlert Severity="Severity.Warning" Variant="Variant.Outlined" Class="mt-4">No action has executed. An authorized decision is required first.@if (HostEnvironment.IsDevelopment()) { <span> This development demo uses the existing development administrator identity.</span> }</MudAlert>
+                    <MudButton Variant="Variant.Filled" Color="Color.Success" Disabled="@_decisionRunning" Class="mt-4" OnClick="() => DecideAsync(true)">Approve simulated action</MudButton>
+                    <MudButton Variant="Variant.Filled" Color="Color.Error" Disabled="@_decisionRunning" Class="mt-4 ml-2" OnClick="() => DecideAsync(false)">Reject action</MudButton>
+                }
+                @if (!string.IsNullOrWhiteSpace(_approvalResult.AuditError)) { <MudAlert Severity="Severity.Warning" Class="mt-4">@_approvalResult.AuditError</MudAlert> }
+                <MudText Typo="Typo.h6" Class="mt-5">Persisted lifecycle timeline</MudText>
+                @if (_approvalResult.Timeline.Count == 0) { <MudAlert Severity="Severity.Info" Class="mt-2">No persisted events are currently visible. Refresh to retry.</MudAlert> }
+                else
+                {
+                    <ol class="demo-timeline" aria-label="Persisted events in chronological order">
+                        @foreach (var entry in _approvalResult.Timeline)
+                        {
+                            <li class="demo-timeline-entry">
+                                <span class="demo-timeline-marker" aria-hidden="true"></span>
+                                <div class="demo-timeline-content">
+                                    <div class="demo-timeline-heading">
+                                        <time datetime="@entry.OccurredAt">@entry.At</time>
+                                        <span class="demo-timeline-event">@entry.EventType</span>
+                                    </div>
+                                    <MudText Typo="Typo.body2">@entry.Summary</MudText>
+                                </div>
+                            </li>
+                        }
+                    </ol>
+                }
+                <MudButton Variant="Variant.Outlined" Disabled="@_decisionRunning" Class="mt-4" OnClick="RefreshAsync">Refresh persisted state</MudButton>
+                <div class="demo-api-links">
+                    <MudText Typo="Typo.caption" Color="Color.Secondary">Raw API responses:</MudText>
+                    <MudLink Href="@_approvalResult.TicketApiUrl" Target="_blank">Ticket activity</MudLink>
+                    <MudLink Href="@_approvalResult.ApprovalApiUrl" Target="_blank">Approval</MudLink>
+                    <MudLink Href="@_approvalResult.TicketAuditApiUrl" Target="_blank">Ticket audit</MudLink>
+                    <MudLink Href="@_approvalResult.ActionAuditApiUrl" Target="_blank">Action audit</MudLink>
+                    <MudLink Href="@_approvalResult.ApprovalAuditApiUrl" Target="_blank">Approval audit</MudLink>
+                </div>
+            </MudCardContent>
+        </MudCard>
+    }
+</div>
+
+@code {
+    private Microsoft.JSInterop.IJSObjectReference? _api;
+    private bool _vpnRunning, _approvalRunning, _decisionRunning;
+    private bool _evaluationLoading = true;
+    private string? _vpnError, _approvalError;
+    private string? _evaluationError;
+    private DemoResult? _vpnResult;
+    private ApprovalResult? _approvalResult;
+    private EvaluationReport? _evaluationReport;
+    private Color ApprovalColor => _approvalResult?.ApprovalStatus switch { "Pending" => Color.Warning, "Approved" => Color.Success, "Rejected" or "Expired" => Color.Error, _ => Color.Info };
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (firstRender)
+        {
+            await RefreshEvaluationResultsAsync();
+        }
+    }
+
+    private async Task RefreshEvaluationResultsAsync()
+    {
+        _evaluationLoading = true;
+        _evaluationError = null;
+        try
+        {
+            _evaluationReport = await (await ApiAsync()).InvokeAsync<EvaluationReport>("loadPersistedEvaluationResults");
+        }
+        catch (Microsoft.JSInterop.JSException ex)
+        {
+            _evaluationError = ex.Message;
+        }
+        finally
+        {
+            _evaluationLoading = false;
+            StateHasChanged();
+        }
+    }
+
+    private async Task RunVpnDemoAsync()
+    {
+        _vpnRunning = true; _vpnError = null; _vpnResult = null;
+        try { _vpnResult = await (await ApiAsync()).InvokeAsync<DemoResult>("runVpnSandboxDemo"); Snackbar.Add("Sandbox incident completed through the control plane.", Severity.Success); }
+        catch (Microsoft.JSInterop.JSException ex) { _vpnError = ex.Message; }
+        finally { _vpnRunning = false; }
+    }
+
+    private async Task StartApprovalDemoAsync()
+    {
+        _approvalRunning = true; _approvalError = null; _approvalResult = null;
+        try { _approvalResult = await (await ApiAsync()).InvokeAsync<ApprovalResult>("startApprovalSandboxDemo", HostEnvironment.IsDevelopment()); Snackbar.Add("The simulated action is awaiting approval.", Severity.Success); }
+        catch (Microsoft.JSInterop.JSException ex) { _approvalError = ex.Message; }
+        finally { _approvalRunning = false; }
+    }
+
+    private async Task DecideAsync(bool approve)
+    {
+        if (_approvalResult is null) return;
+        _decisionRunning = true; _approvalError = null;
+        try { _approvalResult = await (await ApiAsync()).InvokeAsync<ApprovalResult>("decideApprovalSandboxDemo", _approvalResult.TicketId, _approvalResult.ActionExecutionId, _approvalResult.ApprovalId, approve, HostEnvironment.IsDevelopment()); Snackbar.Add(approve ? "Approval persisted; .NET executed and resumed the simulated action." : "Rejection persisted; .NET resumed without execution.", Severity.Success); }
+        catch (Microsoft.JSInterop.JSException ex) { _approvalError = ex.Message; }
+        finally { _decisionRunning = false; }
+    }
+
+    private async Task RefreshAsync()
+    {
+        if (_approvalResult is null) return;
+        _decisionRunning = true; _approvalError = null;
+        try { _approvalResult = await (await ApiAsync()).InvokeAsync<ApprovalResult>("refreshApprovalSandboxDemo", _approvalResult.TicketId, _approvalResult.ActionExecutionId, _approvalResult.ApprovalId, HostEnvironment.IsDevelopment()); }
+        catch (Microsoft.JSInterop.JSException ex) { _approvalError = ex.Message; }
+        finally { _decisionRunning = false; }
+    }
+
+    private async Task<Microsoft.JSInterop.IJSObjectReference> ApiAsync() => _api ??= await JS.InvokeAsync<Microsoft.JSInterop.IJSObjectReference>("import", "./Components/Pages/Demo.razor.js");
+    private sealed class DemoResult { public string Outcome { get; init; } = "Unknown"; public string? ProposedTool { get; init; } public string? Summary { get; init; } public string TicketApiUrl { get; init; } = "/"; }
+    private sealed class ApprovalResult { public string TicketId { get; init; } = ""; public string ActionExecutionId { get; init; } = ""; public string ApprovalId { get; init; } = ""; public string ProposedTool { get; init; } = ""; public string ApprovalStatus { get; init; } = ""; public string Explanation { get; init; } = ""; public string ExecutionState { get; init; } = ""; public bool CanDecide { get; init; } public string? AuditError { get; init; } public List<TimelineEntry> Timeline { get; init; } = []; public string TicketApiUrl { get; init; } = "/"; public string ApprovalApiUrl { get; init; } = "/"; public string TicketAuditApiUrl { get; init; } = "/"; public string ActionAuditApiUrl { get; init; } = "/"; public string ApprovalAuditApiUrl { get; init; } = "/"; }
+    private sealed class TimelineEntry { public string At { get; init; } = ""; public string OccurredAt { get; init; } = ""; public string EventType { get; init; } = ""; public string Summary { get; init; } = ""; }
+    private sealed class EvaluationReport { public int RunCount { get; init; } public List<EvaluationDataset> Datasets { get; init; } = []; }
+    private sealed class EvaluationDataset { public string DatasetName { get; init; } = ""; public string DatasetVersion { get; init; } = ""; public List<EvaluationRun> Runs { get; init; } = []; }
+    private sealed class EvaluationRun { public string ModelType { get; init; } = ""; public string ModelName { get; init; } = ""; public string? Provider { get; init; } public int SampleCount { get; init; } public DateTimeOffset StartedAt { get; init; } public DateTimeOffset? FinishedAt { get; init; } public Dictionary<string, double> Metrics { get; init; } = []; }
+}

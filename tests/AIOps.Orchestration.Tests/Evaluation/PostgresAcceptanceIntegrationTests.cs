@@ -9,21 +9,50 @@ using AIOps.Infrastructure.Time;
 using AIOps.Orchestration.Evaluation;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Options;
+using Npgsql;
 using Pgvector.EntityFrameworkCore;
 
 namespace AIOps.Orchestration.Tests.Evaluation;
 
 public sealed class PostgresAcceptanceIntegrationTests
 {
-    [Fact]
+    [RequiresAcceptancePostgresFact]
     public async Task EvaluationRunner_runs_are_accepted_and_rolled_back_in_postgres()
     {
         var connectionString = Environment.GetEnvironmentVariable(
-            "ConnectionStrings__PostgresConnection");
-        if (string.IsNullOrWhiteSpace(connectionString))
+            "AIOPS_ACCEPTANCE_TEST_CONNECTION");
+        var expectedHost = Environment.GetEnvironmentVariable(
+            "AIOPS_ACCEPTANCE_TEST_HOST");
+        var expectedPortValue = Environment.GetEnvironmentVariable(
+            "AIOPS_ACCEPTANCE_TEST_PORT");
+        var expectedDatabase = Environment.GetEnvironmentVariable(
+            "AIOPS_ACCEPTANCE_TEST_DATABASE");
+
+        if (string.IsNullOrWhiteSpace(connectionString) ||
+            string.IsNullOrWhiteSpace(expectedHost) ||
+            !int.TryParse(expectedPortValue, out var expectedPort) ||
+            !string.Equals(
+                expectedDatabase,
+                "aios_acceptance_test",
+                StringComparison.Ordinal))
         {
             throw new InvalidOperationException(
-                "Set ConnectionStrings__PostgresConnection to run this PostgreSQL integration test.");
+                "The isolated acceptance PostgreSQL test configuration is invalid.");
+        }
+
+        var connection = new NpgsqlConnectionStringBuilder(connectionString);
+        if (!string.Equals(
+                connection.Database,
+                "aios_acceptance_test",
+                StringComparison.Ordinal) ||
+            !string.Equals(
+                connection.Host,
+                expectedHost,
+                StringComparison.OrdinalIgnoreCase) ||
+            connection.Port != expectedPort)
+        {
+            throw new InvalidOperationException(
+                "The acceptance integration test requires its explicitly configured isolated PostgreSQL database.");
         }
 
         var options = new DbContextOptionsBuilder<AIOpsDbContext>()
@@ -95,19 +124,25 @@ public sealed class PostgresAcceptanceIntegrationTests
             const string modelType = "deterministic_test";
             const string modelName = "InProcessFakeAgentGateway";
             const string promptVersion = "phase15-b3-integration-v1";
+            const string baselineRevision =
+                "1111111111111111111111111111111111111111";
+            const string candidateRevision =
+                "2222222222222222222222222222222222222222";
 
             var baselineSummary = await runner.RunAsync(
                 dataset,
                 baselineExperimentId,
                 modelType,
                 modelName,
-                promptVersion);
+                promptVersion,
+                sourceRevision: baselineRevision);
             var candidateSummary = await runner.RunAsync(
                 dataset,
                 candidateExperimentId,
                 modelType,
                 modelName,
-                promptVersion);
+                promptVersion,
+                sourceRevision: candidateRevision);
 
             var baselineRuns = await evaluationStore.ListRunsAsync(
                 baselineExperimentId);
@@ -132,6 +167,14 @@ public sealed class PostgresAcceptanceIntegrationTests
             Assert.Equal(promptVersion, baselineRun.PromptVersion);
             Assert.Equal(promptVersion, candidateRun.PromptVersion);
             Assert.Equal(baselineRun.ConfigJson, candidateRun.ConfigJson);
+            Assert.Equal(baselineRevision, baselineRun.SourceRevision);
+            Assert.Equal(candidateRevision, candidateRun.SourceRevision);
+            Assert.Equal(
+                EvaluationInputFingerprint.ComputeSha256(dataset),
+                baselineRun.DatasetSha256);
+            Assert.Equal(
+                baselineRun.DatasetSha256,
+                candidateRun.DatasetSha256);
             Assert.Equal(
                 baselineSummary.Metrics.TriageAccuracy,
                 candidateSummary.Metrics.TriageAccuracy);
@@ -207,6 +250,18 @@ public sealed class PostgresAcceptanceIntegrationTests
                 candidateRun.Id,
                 persistedAcceptance.CandidateRunId);
             Assert.Equal("Passed", persistedAcceptance.Status);
+            var readBack = await acceptanceStore.GetAsync(decision.ResultId);
+            Assert.NotNull(readBack);
+            Assert.Equal(decision.ResultId, readBack.Id);
+            Assert.Equal(
+                EvaluationAcceptanceStatus.Passed,
+                readBack.Status);
+            Assert.Equal(
+                baselineRun.Id,
+                readBack.BaselineRunId);
+            Assert.Equal(
+                candidateRun.Id,
+                readBack.CandidateRunId);
         }
         finally
         {
@@ -226,6 +281,26 @@ public sealed class PostgresAcceptanceIntegrationTests
                 Assert.False(
                     await context.EvaluationAcceptanceResults.AnyAsync(
                         result => result.Id == resultId));
+            }
+        }
+    }
+
+    private sealed class RequiresAcceptancePostgresFactAttribute : FactAttribute
+    {
+        public RequiresAcceptancePostgresFactAttribute()
+        {
+            if (new[]
+            {
+                "AIOPS_ACCEPTANCE_TEST_CONNECTION",
+                "AIOPS_ACCEPTANCE_TEST_HOST",
+                "AIOPS_ACCEPTANCE_TEST_PORT",
+                "AIOPS_ACCEPTANCE_TEST_DATABASE"
+            }
+            .Any(name => string.IsNullOrWhiteSpace(
+                Environment.GetEnvironmentVariable(name))))
+            {
+                Skip =
+                    "The isolated PostgreSQL acceptance integration database is not configured.";
             }
         }
     }

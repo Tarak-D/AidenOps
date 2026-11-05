@@ -270,5 +270,11 @@ public sealed class EvaluationAcceptanceServiceTests
             Records.Add(result);
             return Task.CompletedTask;
         }
+
+        public Task<EvaluationAcceptanceRecord?> GetAsync(
+            Guid resultId,
+            CancellationToken cancellationToken = default) =>
+            Task.FromResult(
+                Records.SingleOrDefault(record => record.Id == resultId));
     }
 }

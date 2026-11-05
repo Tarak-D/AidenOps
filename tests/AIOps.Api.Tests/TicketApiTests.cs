@@ -25,17 +25,17 @@ using Xunit;
 
 namespace AIOps.Api.Tests;
 
-public sealed class TicketApiTests : IClassFixture<WebApplicationFactory<Program>>
+public sealed class TicketApiTests : IClassFixture<ApiTestWebApplicationFactory>
 {
     private readonly WebApplicationFactory<Program> _fixture;
     private readonly HttpClient _client;
     private readonly RecordingAgentGateway _gateway = new();
 
-    public TicketApiTests(WebApplicationFactory<Program> factory)
+    public TicketApiTests(ApiTestWebApplicationFactory factory)
     {
         _fixture = factory.WithWebHostBuilder(b =>
         {
-            b.UseEnvironment("Test");
+            b.UseEnvironment("Development");
             b.ConfigureTestServices(services =>
             {
                 services.RemoveAll<IAgentGateway>();
@@ -52,7 +52,7 @@ public sealed class TicketApiTests : IClassFixture<WebApplicationFactory<Program
             });
         });
 
-        // TestEnvironment avoids HTTPS redirect/config requirements; no secrets involved.
+        // Development environment enables the local test identity handler.
         _client = _fixture.CreateDefaultClient();
         _client.DefaultRequestHeaders.Add("X-Dev-User", "engineer");
     }
@@ -126,6 +126,36 @@ public sealed class TicketApiTests : IClassFixture<WebApplicationFactory<Program
         Assert.NotNull(problem);
         Assert.True(problem!.Errors.ContainsKey("title"));
         Assert.True(problem.Errors.ContainsKey("reporterEmail"));
+    }
+
+    [Fact]
+    public async Task Audit_query_requires_admin_and_returns_persisted_events()
+    {
+        var entityId = Guid.NewGuid().ToString("N");
+        var auditStore = _fixture.Services.GetRequiredService<IAuditStore>();
+        await auditStore.AppendAsync(new AuditRecordInput(
+            Guid.NewGuid(),
+            ActorKind.System,
+            "api-test",
+            "DemoAuditRecorded",
+            "ticket",
+            entityId,
+            "{}"));
+
+        var forbidden = await _client.GetAsync($"/api/v1/audit/ticket/{entityId}");
+        Assert.Equal(HttpStatusCode.Forbidden, forbidden.StatusCode);
+
+        using var request = new HttpRequestMessage(
+            HttpMethod.Get,
+            $"/api/v1/audit/ticket/{entityId}?take=10");
+        request.Headers.Add("X-Dev-User", "admin");
+        var response = await _client.SendAsync(request);
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        var events = await response.Content.ReadFromJsonAsync<List<AuditRecordView>>(Json);
+        var auditEvent = Assert.Single(events!);
+        Assert.Equal("DemoAuditRecorded", auditEvent.Record.EventType);
+        Assert.Equal(entityId, auditEvent.Record.EntityId);
     }
 
     [Fact]
@@ -284,6 +314,47 @@ public sealed class TicketApiTests : IClassFixture<WebApplicationFactory<Program
         Assert.NotNull(problem);
         Assert.Contains("correlationId", problem!.Errors.Keys);
         Assert.Equal(before, _gateway.StartRequests.Count);
+    }
+
+    [Fact]
+    public async Task Approver_can_reject_a_persisted_approval()
+    {
+        var ticket = await CreateTicketAsync(
+            "Approval decision",
+            "Verify an authorized rejection.");
+        var action = ActionExecution.Propose(
+            ticket.Id,
+            "Test.ApprovalRequired",
+            "{}",
+            RiskLevel.Moderate,
+            "test-agent",
+            "A controlled test action.",
+            DateTimeOffset.UtcNow);
+        using (var scope = _fixture.Services.CreateScope())
+        {
+            await scope.ServiceProvider
+                .GetRequiredService<IActionExecutionStore>()
+                .AddAsync(action);
+        }
+
+        using var createResponse = await PostAsApproverAsync(
+            $"/api/v1/approvals/actions/{action.Id}",
+            new CreateApprovalRequest("Authorized API test."));
+        Assert.Equal(HttpStatusCode.Created, createResponse.StatusCode);
+        var approval = await createResponse.Content
+            .ReadFromJsonAsync<ApprovalResponse>(Json);
+        Assert.NotNull(approval);
+
+        using var response = await PostAsApproverAsync(
+            $"/api/v1/approvals/{approval!.Id}/decision",
+            new DecideApprovalRequest(false, "Rejected in API test."));
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        var result = await response.Content
+            .ReadFromJsonAsync<ApprovalResponse>(Json);
+        Assert.NotNull(result);
+        Assert.Equal(ApprovalStatus.Rejected, result!.Status);
+        Assert.Equal("approver", result.DecidedBy);
     }
 
     [Fact]
@@ -562,8 +633,9 @@ public async Task Knowledge_search_with_invalid_limit_returns_400()
     [Fact]
     public void ToolSystem_IsRegisteredInHost()
     {
+        using var scope = _fixture.Services.CreateScope();
         Assert.NotNull(
-            _fixture.Services.GetRequiredService<ToolExecutor>());
+            scope.ServiceProvider.GetRequiredService<ToolExecutor>());
 
         var toolRegistry =
             _fixture.Services.GetRequiredService<IToolRegistry>();

@@ -11,12 +11,12 @@ using Microsoft.Extensions.DependencyInjection.Extensions;
 namespace AIOps.Api.Tests;
 
 public sealed class EvaluationComparisonApiTests
-    : IClassFixture<WebApplicationFactory<Program>>
+    : IClassFixture<ApiTestWebApplicationFactory>
 {
-    private readonly WebApplicationFactory<Program> _factory;
+    private readonly ApiTestWebApplicationFactory _factory;
 
     public EvaluationComparisonApiTests(
-        WebApplicationFactory<Program> factory)
+        ApiTestWebApplicationFactory factory)
     {
         _factory = factory;
     }
@@ -28,7 +28,7 @@ public sealed class EvaluationComparisonApiTests
 
         using var client = _factory.WithWebHostBuilder(builder =>
         {
-            builder.UseEnvironment("Test");
+            builder.UseEnvironment("Development");
 
             builder.ConfigureTestServices(services =>
             {
@@ -72,8 +72,63 @@ public sealed class EvaluationComparisonApiTests
         Assert.Equal("golden", store.LastDatasetName);
     }
 
+    [Fact]
+    public async Task ComparisonEndpoint_ReturnsEmptyReportWhenNoRunsArePersisted()
+    {
+        var store = new FakeEvaluationStore([]);
+
+        using var client = _factory.WithWebHostBuilder(builder =>
+        {
+            builder.UseEnvironment("Development");
+
+            builder.ConfigureTestServices(services =>
+            {
+                services.RemoveAll<IEvaluationStore>();
+                services.AddSingleton<IEvaluationStore>(store);
+
+                services.RemoveAll<EvaluationComparisonService>();
+                services.AddScoped<EvaluationComparisonService>();
+            });
+        }).CreateClient();
+
+        using var response = await client.GetAsync(
+            "/api/v1/evaluations/comparison");
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+
+        using var document = JsonDocument.Parse(
+            await response.Content.ReadAsStringAsync());
+
+        Assert.Equal(0, document.RootElement.GetProperty("runCount").GetInt32());
+        Assert.Empty(document.RootElement.GetProperty("datasets").EnumerateArray());
+    }
+
     private sealed class FakeEvaluationStore : IEvaluationStore
     {
+        private readonly IReadOnlyList<ExperimentRunRecord> _runs;
+
+        public FakeEvaluationStore(
+            IReadOnlyList<ExperimentRunRecord>? runs = null)
+        {
+            _runs = runs ??
+            [
+                new(
+                    Guid.NewGuid(),
+                    "experiment-1",
+                    "llm",
+                    "model-a",
+                    "prompt-v1",
+                    "golden",
+                    "v1",
+                    """{"Model":{"Provider":"test-provider"}}""",
+                    10,
+                    DateTimeOffset.UtcNow,
+                    DateTimeOffset.UtcNow,
+                    """{"TriageAccuracy":0.9}""",
+                    null)
+            ];
+        }
+
         public string? LastExperimentId { get; private set; }
 
         public string? LastDatasetName { get; private set; }
@@ -86,26 +141,7 @@ public sealed class EvaluationComparisonApiTests
             LastExperimentId = experimentId;
             LastDatasetName = datasetName;
 
-            IReadOnlyList<ExperimentRunRecord> runs =
-                new List<ExperimentRunRecord>
-                {
-                    new(
-                        Guid.NewGuid(),
-                        "experiment-1",
-                        "llm",
-                        "model-a",
-                        "prompt-v1",
-                        "golden",
-                        "v1",
-                        """{"Model":{"Provider":"test-provider"}}""",
-                        10,
-                        DateTimeOffset.UtcNow,
-                        DateTimeOffset.UtcNow,
-                        """{"TriageAccuracy":0.9}""",
-                        null)
-                };
-
-            IEnumerable<ExperimentRunRecord> filteredRuns = runs;
+            IEnumerable<ExperimentRunRecord> filteredRuns = _runs;
 
             if (experimentId is not null)
             {

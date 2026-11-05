@@ -15,26 +15,59 @@ public static class AuthPolicies
     public const string CanViewAudit = "CanViewAudit";
     public const string CanManageKnowledge = "CanManageKnowledge";
     public const string CanManageIntegrations = "CanManageIntegrations";
+    public const string CanRunEvaluationAcceptance = "CanRunEvaluationAcceptance";
 }
 
 /// <summary>
-/// DEV-ONLY authentication: select a seeded identity via the "X-Dev-User" header
-/// (viewer | engineer | approver | admin), defaulting to viewer. Documented as a
-/// development convenience; real OIDC (e.g. Microsoft Entra ID) is the documented
-/// production extension point.
+/// Development-only authentication: select a local demo identity through the
+/// "X-Dev-User" header. No production identity provider is configured.
 /// </summary>
 public static class SecurityExtensions
 {
+    private const string DevelopmentIdentityConfigurationSection =
+        "Authentication:DevelopmentIdentity";
+
     public static IServiceCollection AddAIOpsSecurity(
         this IServiceCollection services,
         IConfiguration config,
         IWebHostEnvironment environment)
     {
-        services.AddAuthentication(o =>
+        var developmentIdentityConfiguration = config.GetSection(
+            DevelopmentIdentityConfigurationSection);
+        if (!environment.IsDevelopment() &&
+            developmentIdentityConfiguration.Exists())
+        {
+            throw new InvalidOperationException(
+                "Development identity authentication is configured outside the Development environment.");
+        }
+
+        var useDevelopmentIdentity =
+            environment.IsDevelopment() &&
+            developmentIdentityConfiguration.GetValue<bool>("Enabled");
+
+        var authentication = services.AddAuthentication(o =>
             {
-                o.DefaultScheme = DevIdentityHandler.SchemeName;
-            })
-            .AddScheme<AuthenticationSchemeOptions, DevIdentityHandler>(DevIdentityHandler.SchemeName, _ => { });
+                o.DefaultScheme = useDevelopmentIdentity
+                    ? DevIdentityHandler.SchemeName
+                    : UnconfiguredAuthenticationHandler.SchemeName;
+            });
+
+        if (useDevelopmentIdentity)
+        {
+            authentication.AddScheme<
+                AuthenticationSchemeOptions,
+                DevIdentityHandler>(
+                DevIdentityHandler.SchemeName,
+                _ => { });
+        }
+        else
+        {
+            authentication.AddScheme<
+                AuthenticationSchemeOptions,
+                UnconfiguredAuthenticationHandler>(
+                UnconfiguredAuthenticationHandler.SchemeName,
+                _ => { });
+        }
 
         services.AddAuthorizationBuilder()
             .AddPolicy(AuthPolicies.CanViewQueue, p => p.RequireAuthenticatedUser())
@@ -42,6 +75,11 @@ public static class SecurityExtensions
             .AddPolicy(AuthPolicies.CanRetry, p => p.RequireRole(nameof(UserRole.Engineer), nameof(UserRole.Admin)))
             .AddPolicy(AuthPolicies.CanApprove, p => p.RequireRole(nameof(UserRole.Approver), nameof(UserRole.Admin)))
             .AddPolicy(AuthPolicies.CanViewAudit, p => p.RequireRole(nameof(UserRole.Admin)))
+            .AddPolicy(
+                AuthPolicies.CanRunEvaluationAcceptance,
+                p => p.RequireRole(
+                    nameof(UserRole.Engineer),
+                    nameof(UserRole.Admin)))
             .AddPolicy(AuthPolicies.CanManageKnowledge, p => p.RequireRole(nameof(UserRole.Engineer), nameof(UserRole.Admin)))
             .AddPolicy(AuthPolicies.CanManageIntegrations, p => p.RequireAssertion(context =>
                 context.User.IsInRole(nameof(UserRole.Admin)) ||
@@ -52,12 +90,37 @@ public static class SecurityExtensions
         return services;
     }
 
+    public sealed class UnconfiguredAuthenticationHandler(
+        IOptionsMonitor<AuthenticationSchemeOptions> options,
+        ILoggerFactory logger,
+        UrlEncoder encoder)
+        : AuthenticationHandler<AuthenticationSchemeOptions>(
+            options,
+            logger,
+            encoder)
+    {
+        public const string SchemeName = "Unconfigured";
+
+        protected override Task<AuthenticateResult> HandleAuthenticateAsync() =>
+            Task.FromResult(AuthenticateResult.NoResult());
+    }
+
     public sealed class DevIdentityHandler : AuthenticationHandler<AuthenticationSchemeOptions>
     {
         public const string SchemeName = "DevIdentity";
 
         public DevIdentityHandler(IOptionsMonitor<AuthenticationSchemeOptions> options,
-            ILoggerFactory logger, UrlEncoder encoder) : base(options, logger, encoder) { }
+            ILoggerFactory logger,
+            UrlEncoder encoder,
+            IWebHostEnvironment environment)
+            : base(options, logger, encoder)
+        {
+            if (!environment.IsDevelopment())
+            {
+                throw new InvalidOperationException(
+                    "Development identity authentication is available only in the Development environment.");
+            }
+        }
 
         protected override Task<AuthenticateResult> HandleAuthenticateAsync()
         {

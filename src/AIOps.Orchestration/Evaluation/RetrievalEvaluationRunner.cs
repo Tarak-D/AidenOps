@@ -27,7 +27,8 @@ public sealed class RetrievalEvaluationRunner
         IReadOnlyList<RetrievalEvaluationCase> cases,
         string experimentId,
         int? maxCases = null,
-        CancellationToken cancellationToken = default)
+        CancellationToken cancellationToken = default,
+        string? sourceRevision = null)
     {
         return RunCoreAsync(
             datasetId,
@@ -37,7 +38,8 @@ public sealed class RetrievalEvaluationRunner
             experimentId,
             maxCases,
             cancellationToken,
-            knowledgeCorpus: null);
+            knowledgeCorpus: null,
+            sourceRevision);
     }
 
     public Task<RetrievalEvaluationSummary> RunAsync(
@@ -45,7 +47,8 @@ public sealed class RetrievalEvaluationRunner
         IReadOnlyList<RetrievalEvaluationCase> cases,
         string experimentId,
         int? maxCases = null,
-        CancellationToken cancellationToken = default)
+        CancellationToken cancellationToken = default,
+        string? sourceRevision = null)
     {
         ArgumentNullException.ThrowIfNull(knowledgeCorpus);
         ArgumentNullException.ThrowIfNull(cases);
@@ -75,7 +78,8 @@ public sealed class RetrievalEvaluationRunner
             experimentId,
             maxCases,
             cancellationToken,
-            knowledgeCorpus);
+            knowledgeCorpus,
+            sourceRevision);
     }
 
     private async Task<RetrievalEvaluationSummary> RunCoreAsync(
@@ -86,7 +90,8 @@ public sealed class RetrievalEvaluationRunner
         string experimentId,
         int? maxCases,
         CancellationToken cancellationToken,
-        EvaluationKnowledgeCorpus? knowledgeCorpus)
+        EvaluationKnowledgeCorpus? knowledgeCorpus,
+        string? sourceRevision)
     {
         ArgumentNullException.ThrowIfNull(cases);
 
@@ -204,7 +209,10 @@ public sealed class RetrievalEvaluationRunner
             startedAt,
             finishedAt,
             JsonSerializer.Serialize(persistedMetrics),
-            "Phase 15 retrieval evaluation.");
+            "Phase 15 retrieval evaluation.",
+            sourceRevision,
+            EvaluationInputFingerprint.ComputeSha256(selectedCases),
+            knowledgeCorpusSha256);
 
         await _evaluationStore.RecordRunAsync(
             run,

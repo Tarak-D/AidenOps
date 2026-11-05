@@ -46,6 +46,17 @@ def _deterministic_proposal(
             "Read-only diagnostics are relevant to the reported connectivity issue.",
         )
     elif (
+        "restart" in text
+        and "Cloud.RestartInstance" in available
+        and (instance_id := _instance_id_from(text)) is not None
+    ):
+        proposal = (
+            "Cloud.RestartInstance",
+            {"instanceId": instance_id},
+            0.76,
+            "The incident explicitly requests a restart of the identified cloud instance.",
+        )
+    elif (
         external_ref
         and any(word in text for word in ("ticket", "incident", "update"))
         and "ITSM.UpdateTicket" in available
@@ -70,6 +81,14 @@ def _deterministic_proposal(
         "confidence": confidence,
         "justification": justification,
     }
+
+
+def _instance_id_from(text: str) -> str | None:
+    """Return the first AWS-style instance identifier supplied by the incident."""
+    import re
+
+    match = re.search(r"\bi-[a-z0-9-]+\b", text)
+    return match.group(0) if match else None
 
 
 def _llm_proposal(

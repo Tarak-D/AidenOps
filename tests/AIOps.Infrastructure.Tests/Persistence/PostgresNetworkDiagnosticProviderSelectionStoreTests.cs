@@ -9,15 +9,13 @@ namespace AIOps.Infrastructure.Tests.Persistence;
 
 public sealed class PostgresNetworkDiagnosticProviderSelectionStoreTests
 {
-    private const string ConnectionString =
-        "Host=127.0.0.1;Port=5432;Database=aios;Username=aios;Password=aiospw";
     private const string SelectionId = "active-network-diagnostics";
 
-    [Fact]
+    [RequiresPostgresFact]
     public async Task SelectionPersistsAcrossStoreInstancesWithOnlySelectionMetadata()
     {
         var options = new DbContextOptionsBuilder<AIOpsDbContext>()
-            .UseNpgsql(ConnectionString, npgsqlOptions => npgsqlOptions.UseVector())
+            .UseNpgsql(PostgresTestEnvironment.ConnectionString, npgsqlOptions => npgsqlOptions.UseVector())
             .Options;
         var factory = new TestContextFactory(options);
         await using (var setup = await factory.CreateDbContextAsync())

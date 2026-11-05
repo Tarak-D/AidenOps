@@ -129,6 +129,8 @@ public static class EvaluationEndpoints
                     }
                 })
             .WithName("EvaluateEvaluationAcceptance")
+            .RequireAuthorization(
+                AuthPolicies.CanRunEvaluationAcceptance)
             .Produces<EvaluationAcceptanceResponse>(StatusCodes.Status200OK)
             .ProducesValidationProblem()
             .ProducesProblem(StatusCodes.Status503ServiceUnavailable);

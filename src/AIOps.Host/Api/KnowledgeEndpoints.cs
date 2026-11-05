@@ -1,4 +1,5 @@
 using AIOps.Abstractions.Knowledge;
+using AIOps.Host.Security;
 
 namespace AIOps.Host.Api;
 
@@ -47,7 +48,8 @@ public static class KnowledgeEndpoints
             .WithName("SearchKnowledge")
             .Produces<IReadOnlyList<KnowledgeSearchResult>>(
                 StatusCodes.Status200OK)
-            .Produces(StatusCodes.Status400BadRequest);
+            .Produces(StatusCodes.Status400BadRequest)
+            .RequireAuthorization(AuthPolicies.CanViewQueue);
 
         return endpoints;
     }

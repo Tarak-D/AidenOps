@@ -17,7 +17,10 @@ public sealed record ExperimentRunRecord(
     DateTimeOffset StartedAt,
     DateTimeOffset? FinishedAt,
     string MetricsJson,
-    string? Notes);
+    string? Notes,
+    string? SourceRevision = null,
+    string? DatasetSha256 = null,
+    string? KnowledgeCorpusSha256 = null);
 
 public interface IEvaluationStore
 {

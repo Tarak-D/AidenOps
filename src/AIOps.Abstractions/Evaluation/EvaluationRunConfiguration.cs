@@ -8,7 +8,8 @@ public sealed record EvaluationRunConfiguration(
     int? MaxCases = null,
     bool Deterministic = true,
     bool ExecuteExternalTools = false,
-    string? Notes = null)
+    string? Notes = null,
+    string? SourceRevision = null)
 {
     public void Validate()
     {

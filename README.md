@@ -4,6 +4,53 @@ AidenOps is an enterprise-oriented AI Operations (AIOps) platform for incident t
 
 **Core principle:** AI can recommend an operational action, but the .NET control plane remains responsible for policy validation, approval, execution, and audit.
 
+## Portfolio-ready MVP
+
+The guided `/demo` page shows the current end-to-end sandbox: create a deterministic incident, inspect persisted ticket activity, and walk a simulated infrastructure change through approval or rejection. The page also shows only evaluation runs returned by the persisted-run comparison API; an empty store is shown as empty rather than filled with example results.
+
+### Local setup and launch
+
+Prerequisites: .NET SDK 10.0.400 or later within the selected feature band, Python 3.12, Docker, and PostgreSQL client tools. Start PostgreSQL and apply the database scripts once to a clean local database, following the [development setup guide](docs/development/README.md):
+
+```powershell
+docker compose up -d postgres
+```
+
+In a Python terminal:
+
+```powershell
+Set-Location .\python
+python -m venv .venv
+.\.venv\Scripts\Activate.ps1
+pip install -r requirements.txt
+$env:AGENT_LLM_PROVIDER = "deterministic"
+uvicorn agent_service.main:app --host 127.0.0.1 --port 8000
+```
+
+In a second terminal at the repository root:
+
+```powershell
+$env:ASPNETCORE_ENVIRONMENT = "Development"
+$env:ConnectionStrings__PostgresConnection = Read-Host 'Development PostgreSQL connection string'
+$env:AI__AgentGatewayMode = "Http"
+dotnet run --project .\src\AIOps.Host --launch-profile http
+```
+
+Open [http://localhost:5166/demo](http://localhost:5166/demo). The Python service is configured to use deterministic inference; no external LLM credentials are needed. For database schema ordering and isolated test databases, see the [development setup guide](docs/development/README.md).
+
+### Demo walkthrough
+
+1. Select **Run sandbox incident** to create and investigate the deterministic VPN incident using the simulated diagnostic provider. Follow the ticket activity API link for the persisted activity.
+2. Select **Start approval scenario**. The .NET control plane creates an approval request for the registered simulated `Cloud.RestartInstance` action.
+3. Choose **Approve simulated action** to exercise approval, simulated execution, and resume, or **Reject action** to verify that rejection does not execute the action. To show both outcomes, start a separate approval scenario for the second decision.
+4. Review the persisted chronological activity timeline and the evaluation-results panel. Evaluation results appear only when real persisted runs are available; the comparison API link is a secondary raw-data view.
+
+External cloud, VPN, directory, and ITSM actions in the demo are simulated and guarded by server-side provider checks. The demo does not perform real infrastructure changes, provider writes, or live incident remediation. The `X-Dev-User` identity is a local Development-only convenience, not production authentication. Non-Development environments reject development-identity configuration and return 401 for protected requests until a supported identity provider is explicitly integrated and verified. See [authentication and authorization](docs/security/README.md).
+
+### Screenshot and video guidance
+
+Capture `/demo` with the provider simulation notice visible, then show the incident result, a pending approval, and either the approved/resumed or rejected/no-execution timeline. To demonstrate both decision paths, record two separate approval scenarios. Use a disposable local database, avoid including credentials or unrelated ticket data, and label any recorded UI as a simulated sandbox. Do not edit evaluation values into screenshots: an empty evaluation panel accurately indicates that no persisted results are available.
+
 ## Architecture
 
 ```text
@@ -38,12 +85,10 @@ Python handles agent workflow and proposals. Privileged tools are executed throu
 
 - Phases 1–14: recorded as complete in the project history.
 - Phase 15: advanced evaluation improvements are in progress; do not treat every originally planned Phase 15 item as complete without checking the implementation.
-- Repository HEAD: `2e7aaf2` — `Add scikit-learn evaluation dependency`.
-- Latest local .NET test run: **509 passed, 0 failed, 0 skipped**.
-- Latest local Python test run: **161 passed, 0 failed**, with one Starlette/AnyIO deprecation warning.
-- These test results include uncommitted audit changes and are not a release checkpoint.
-
-These are the latest recorded results from the development session, not a guarantee that the tests have been rerun against every later change.
+- Repository HEAD: `7553bcf` — `Add reproducible classical ML evaluation`.
+- Latest local Release .NET test run: **615 passed, 0 failed, 12 skipped**. The skipped tests are opt-in PostgreSQL integrations.
+- Latest local Python test run: **164 passed, 0 failed**, with one Starlette multipart deprecation warning.
+- These are local results for the current worktree, not a release or CI checkpoint.
 
 ## Current evaluation work
 
@@ -82,8 +127,8 @@ Pricing-based cost is an estimate based on configured rates and reported token c
 Run from the repository root:
 
 ```powershell
-dotnet build AIOps.slnx
-dotnet test AIOps.slnx
+dotnet build AIOps.slnx --configuration Release
+dotnet test AIOps.slnx --configuration Release
 ```
 
 Run Python tests:
@@ -91,7 +136,13 @@ Run Python tests:
 ```powershell
 Set-Location .\python
 .\.venv\Scripts\Activate.ps1
-pytest -q
+python -m pytest -q
+```
+
+Check the browser module syntax from the repository root:
+
+```powershell
+node --check --experimental-default-type=module .\src\AIOps.Host\Components\Pages\Demo.razor.js
 ```
 
 For the full setup and safe development defaults, see [Development](docs/development/README.md).

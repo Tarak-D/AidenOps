@@ -16,10 +16,16 @@ used by ordinary CI makes those action implementations immutable for this
 workflow revision; it does not make the workflow, its commands, evaluator, or
 policy independent of candidate changes.
 
-No trusted regression runner is implemented in this repository. No GitHub
-branch-protection or ruleset settings were verified. Do not treat a green
-ordinary CI run, a local reusable workflow, or a candidate-authored workflow
-named "trusted" as proof of acceptance or as a release barrier.
+An application-side `EvaluationAcceptanceHarness` is implemented. It accepts
+explicit revision/run IDs and shared dataset/corpus bytes, verifies persisted
+run provenance, delegates the comparison to the .NET acceptance service, and
+requires a matching persisted `Passed` decision. It does not build or run
+baseline/candidate revisions, attest that a revision produced a run, or own a
+protected policy. No trusted regression CI runner is implemented or
+configured. No GitHub branch-protection or ruleset settings were verified. Do
+not treat a green ordinary CI run, a local reusable workflow, or a
+candidate-authored workflow named "trusted" as proof of acceptance or as a
+release barrier.
 
 ## Trust prerequisite and ownership
 
@@ -57,7 +63,8 @@ grant the candidate the runner's credentials.
 ## Future runner contract
 
 This contract describes required inputs and outputs for a later trusted runner;
-it is not implemented or validated by the ordinary CI workflow.
+the application-side acceptance harness is implemented, but this contract is
+not yet implemented or validated by a trusted CI workflow.
 
 Required inputs:
 
@@ -78,9 +85,10 @@ Record source revision provenance separately from the existing model, prompt,
 configuration, and dataset compatibility metadata. Do not weaken the existing
 acceptance compatibility checks to fit revision differences.
 
-The trusted harness must persist both runs and the acceptance decision through
-the existing .NET evaluation architecture, then read the persisted decision
-back. Verify that the persisted decision identifies the exact baseline and
+The trusted runner must persist both runs and the acceptance decision through
+the existing .NET evaluation architecture, then call the application-side
+harness to read the persisted decision back. Verify that the persisted
+decision identifies the exact baseline and
 candidate run IDs and has status `Passed`. Missing, incomplete, failed,
 incompatible, unpersisted, or unreadable results, any `Failed` or `Blocked`
 status, and unexpected errors must result in a nonzero check. An HTTP success
@@ -118,9 +126,9 @@ repository administrator must:
    process before enforcement is enabled.
 
 No branch-protection, ruleset, required-check, CODEOWNERS, or external runner
-configuration is verified by repository code. Until these administrator-owned
-controls and the trusted runner exist, this remains a documented future
-contract; acceptance enforcement must remain disabled.
+configuration is verified by repository code. Until these administrator-owned controls and the trusted runner exist, this
+remains a documented future contract; acceptance enforcement must remain
+disabled. The required branch-protection status check has not been verified.
 
 ## Remaining application-repository work
 

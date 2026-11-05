@@ -46,6 +46,45 @@ public sealed class PostgresEvaluationAcceptanceStore(
                 exception);
         }
     }
+
+    public async Task<EvaluationAcceptanceRecord?> GetAsync(
+        Guid resultId,
+        CancellationToken cancellationToken = default)
+    {
+        var entity = await context.EvaluationAcceptanceResults
+            .AsNoTracking()
+            .SingleOrDefaultAsync(
+                result => result.Id == resultId,
+                cancellationToken);
+
+        if (entity is null)
+        {
+            return null;
+        }
+
+        if (!Enum.TryParse<EvaluationAcceptanceStatus>(
+                entity.Status,
+                ignoreCase: false,
+                out var status) ||
+            !Enum.IsDefined(status))
+        {
+            throw new EvaluationAcceptancePersistenceException(
+                "The persisted evaluation acceptance status is invalid.");
+        }
+
+        return new EvaluationAcceptanceRecord(
+            entity.Id,
+            entity.EvaluatedAt,
+            entity.BaselineExperimentId,
+            entity.CandidateExperimentId,
+            entity.BaselineRunId,
+            entity.CandidateRunId,
+            entity.PolicyName,
+            entity.PolicyJson,
+            status,
+            entity.IssuesJson,
+            entity.MetricsJson);
+    }
 }
 
 public sealed class UnavailableEvaluationAcceptanceStore
@@ -53,6 +92,14 @@ public sealed class UnavailableEvaluationAcceptanceStore
 {
     public Task RecordAsync(
         EvaluationAcceptanceRecord result,
+        CancellationToken cancellationToken = default)
+    {
+        throw new EvaluationAcceptancePersistenceException(
+            "Evaluation acceptance persistence is unavailable because PostgreSQL is not configured.");
+    }
+
+    public Task<EvaluationAcceptanceRecord?> GetAsync(
+        Guid resultId,
         CancellationToken cancellationToken = default)
     {
         throw new EvaluationAcceptancePersistenceException(

@@ -40,6 +40,7 @@ public sealed class EvaluationRunner
             configuration.Model.ModelName,
             configuration.Model.PromptVersion,
             configuration,
+            configuration.SourceRevision,
             cancellationToken);
     }
 
@@ -49,7 +50,8 @@ public sealed class EvaluationRunner
         string modelType,
         string modelName,
         string? promptVersion,
-        CancellationToken ct = default)
+        CancellationToken ct = default,
+        string? sourceRevision = null)
     {
         return RunAsyncCore(
             dataset,
@@ -58,6 +60,7 @@ public sealed class EvaluationRunner
             modelName,
             promptVersion,
             configuration: null,
+            sourceRevision,
             ct);
     }
 
@@ -68,6 +71,7 @@ public sealed class EvaluationRunner
         string modelName,
         string? promptVersion,
         EvaluationRunConfiguration? configuration,
+        string? sourceRevision,
         CancellationToken ct)
     {
         ArgumentNullException.ThrowIfNull(dataset);
@@ -150,7 +154,9 @@ public sealed class EvaluationRunner
             startedAt,
             finishedAt,
             JsonSerializer.Serialize(persistedMetrics),
-            notes);
+            notes,
+            sourceRevision,
+            EvaluationInputFingerprint.ComputeSha256(dataset));
 
         await _evaluationStore.RecordRunAsync(run, ct);
 

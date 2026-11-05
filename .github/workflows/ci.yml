@@ -32,6 +32,16 @@ jobs:
     env:
       ConnectionStrings__PostgresConnection: Host=localhost;Port=5432;Database=aios;Username=aios;Password=aiospw
 
+      AIOPS_ACCEPTANCE_TEST_CONNECTION: Host=localhost;Port=5432;Database=aios_acceptance_test;Username=aios;Password=aiospw
+      AIOPS_ACCEPTANCE_TEST_HOST: localhost
+      AIOPS_ACCEPTANCE_TEST_PORT: "5432"
+      AIOPS_ACCEPTANCE_TEST_DATABASE: aios_acceptance_test
+
+      AIOPS_PHASE15_TEST_CONNECTION: Host=localhost;Port=5432;Database=aios_phase15_test;Username=aios;Password=aiospw
+      AIOPS_PHASE15_TEST_HOST: localhost
+      AIOPS_PHASE15_TEST_PORT: "5432"
+      AIOPS_PHASE15_TEST_DATABASE: aios_phase15_test
+
     steps:
       - name: Check out repository
         uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
@@ -61,7 +71,7 @@ jobs:
         run: dotnet restore AIOps.slnx
 
       - name: Build .NET solution
-        run: dotnet build AIOps.slnx --no-restore
+        run: dotnet build AIOps.slnx --configuration Release --no-restore
 
       - name: Apply PostgreSQL test schemas
         env:
@@ -76,11 +86,33 @@ jobs:
             PostgreSQL-Phase14-Batch2.sql \
             PostgreSQL-Phase14-Batch3.sql \
             PostgreSQL-Phase15-Batch2-Runs.sql \
-            PostgreSQL-Phase15-Batch2.sql
+            PostgreSQL-Phase15-Batch2.sql \
+            PostgreSQL-Phase15-Batch7.sql
           do
             docker exec -i "$POSTGRES_CONTAINER_ID" \
               psql -v ON_ERROR_STOP=1 -U aios -d aios < "$schema"
           done
 
+      - name: Provision isolated evaluation databases
+        env:
+          POSTGRES_CONTAINER_ID: ${{ job.services.postgres.id }}
+        run: |
+          for database in aios_phase15_test aios_acceptance_test
+          do
+            docker exec "$POSTGRES_CONTAINER_ID" \
+              createdb -U aios "$database"
+            for schema in \
+              PostgreSQL-Phase15-Batch2-Runs.sql \
+              PostgreSQL-Phase15-Batch2.sql \
+              PostgreSQL-Phase15-Batch7.sql
+            do
+              docker exec -i "$POSTGRES_CONTAINER_ID" \
+                psql -v ON_ERROR_STOP=1 -U aios -d "$database" < "$schema"
+            done
+          done
+
+      - name: Configure PostgreSQL integration tests
+        run: echo "AIOPS_POSTGRES_TEST_CONNECTION=$ConnectionStrings__PostgresConnection" >> "$GITHUB_ENV"
+
       - name: Run .NET tests
-        run: dotnet test AIOps.slnx --no-build --no-restore
+        run: dotnet test AIOps.slnx --configuration Release --no-build --no-restore

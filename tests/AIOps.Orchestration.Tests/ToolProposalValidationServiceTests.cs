@@ -57,6 +57,91 @@ public sealed class ToolProposalValidationServiceTests
         Assert.Equal("action_execution", auditRecord.EntityType);
     }
 
+    [Theory]
+    [InlineData("{\"userOrDeviceId\":\"user@example.com\"}")]
+    [InlineData("{\"target\":\"user@example.com\",\"targetType\":\"User\"}")]
+    public async Task Validates_proposal_against_oneOf_object_schemas(
+        string argumentsJson)
+    {
+        const string inputSchema = """
+            {"oneOf":[{"type":"object","properties":{"target":{"type":"string","minLength":1},"targetType":{"type":"string","enum":["User","Device","Ip"]}},"required":["target","targetType"],"additionalProperties":false},{"type":"object","properties":{"userOrDeviceId":{"type":"string","minLength":1}},"required":["userOrDeviceId"],"additionalProperties":false}]}
+            """;
+        var tool = new TestTool(
+            "Network.RunVpnDiagnostics",
+            RiskLevel.Safe,
+            inputSchema);
+        var actionStore = new Mock<IActionExecutionStore>();
+        actionStore.Setup(x => x.AddAsync(
+                It.IsAny<ActionExecution>(),
+                It.IsAny<CancellationToken>()))
+            .Returns(Task.CompletedTask);
+        var audit = new Mock<IAuditStore>();
+        audit.Setup(x => x.AppendAsync(
+                It.IsAny<AuditRecordInput>(),
+                It.IsAny<CancellationToken>()))
+            .Returns(Task.CompletedTask);
+
+        var result = await CreateService(
+                new TestToolRegistry([tool]),
+                actionStore,
+                audit)
+            .ValidateAndPersistAsync(
+                TicketId,
+                CorrelationId,
+                CreateResult(new ToolProposal(
+                    tool.Name,
+                    argumentsJson,
+                    0.9,
+                    "A VPN connectivity issue requires a read-only diagnostic.")));
+
+        Assert.Equal(AgentRunOutcome.ProposalCreated, result.Outcome);
+        Assert.Equal(tool.Name, result.Proposal?.ToolName);
+        actionStore.Verify(
+            x => x.AddAsync(It.IsAny<ActionExecution>(), It.IsAny<CancellationToken>()),
+            Times.Once);
+    }
+
+    [Theory]
+    [InlineData(
+        "{\"target\":\"user@example.com\"}",
+        "Required tool argument 'targetType' is missing.")]
+    [InlineData(
+        "{\"target\":\"user@example.com\",\"targetType\":\"Other\"}",
+        "not one of the registered values")]
+    public async Task Rejects_proposal_that_does_not_match_a_oneOf_object_schema(
+        string argumentsJson,
+        string expectedError)
+    {
+        const string inputSchema = """
+            {"oneOf":[{"type":"object","properties":{"target":{"type":"string","minLength":1},"targetType":{"type":"string","enum":["User","Device","Ip"]}},"required":["target","targetType"],"additionalProperties":false},{"type":"object","properties":{"userOrDeviceId":{"type":"string","minLength":1}},"required":["userOrDeviceId"],"additionalProperties":false}]}
+            """;
+        var tool = new TestTool(
+            "Network.RunVpnDiagnostics",
+            RiskLevel.Safe,
+            inputSchema);
+        var actionStore = new Mock<IActionExecutionStore>();
+        var audit = new Mock<IAuditStore>();
+
+        var result = await CreateService(
+                new TestToolRegistry([tool]),
+                actionStore,
+                audit)
+            .ValidateAndPersistAsync(
+                TicketId,
+                CorrelationId,
+                CreateResult(new ToolProposal(
+                    tool.Name,
+                    argumentsJson,
+                    0.9,
+                    "A VPN connectivity issue requires a read-only diagnostic.")));
+
+        Assert.Equal(AgentRunOutcome.Escalated, result.Outcome);
+        Assert.Contains(expectedError, result.Error);
+        actionStore.Verify(
+            x => x.AddAsync(It.IsAny<ActionExecution>(), It.IsAny<CancellationToken>()),
+            Times.Never);
+    }
+
     [Fact]
     public async Task ProposalCreated_without_proposal_is_escalated_and_audited()
     {
@@ -163,19 +248,20 @@ public sealed class ToolProposalValidationServiceTests
 
     private sealed class TestTool : ITool
     {
-        public TestTool(string name, RiskLevel risk)
+        public TestTool(string name, RiskLevel risk, string? inputSchemaJson = null)
         {
             Name = name;
             Risk = risk;
+            InputSchemaJson = inputSchemaJson ?? """
+                {"type":"object","properties":{"userPrincipalName":{"type":"string","minLength":1}},"required":["userPrincipalName"],"additionalProperties":false}
+                """;
         }
 
         public string Name { get; }
         public string Description => "Test proposal tool.";
         public RiskLevel Risk { get; }
         public bool RequiresApproval => true;
-        public string InputSchemaJson => """
-            {"type":"object","properties":{"userPrincipalName":{"type":"string","minLength":1}},"required":["userPrincipalName"],"additionalProperties":false}
-            """;
+        public string InputSchemaJson { get; }
 
         public Task<ToolResult> ExecuteAsync(
             string argumentsJson,

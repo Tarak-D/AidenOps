@@ -14,11 +14,11 @@ using Microsoft.Extensions.Options;
 namespace AIOps.Api.Tests;
 
 public sealed class CloudProviderStatusApiTests
-    : IClassFixture<WebApplicationFactory<Program>>
+    : IClassFixture<ApiTestWebApplicationFactory>
 {
-    private readonly WebApplicationFactory<Program> _factory;
+    private readonly ApiTestWebApplicationFactory _factory;
 
-    public CloudProviderStatusApiTests(WebApplicationFactory<Program> factory)
+    public CloudProviderStatusApiTests(ApiTestWebApplicationFactory factory)
     {
         _factory = factory;
     }
@@ -27,7 +27,7 @@ public sealed class CloudProviderStatusApiTests
     public async Task StatusEndpoint_ReportsResolvedSimulatedProvider()
     {
         using var client = _factory.WithWebHostBuilder(builder =>
-                builder.UseEnvironment("Test"))
+                builder.UseEnvironment("Development"))
             .CreateClient();
 
         using var response = await client.GetAsync(
@@ -49,7 +49,7 @@ public sealed class CloudProviderStatusApiTests
     {
         using var client = _factory.WithWebHostBuilder(builder =>
         {
-            builder.UseEnvironment("Test");
+            builder.UseEnvironment("Development");
             builder.ConfigureAppConfiguration((_, configuration) =>
                 configuration.AddInMemoryCollection(new Dictionary<string, string?>
                 {

@@ -64,6 +64,28 @@ def test_deterministic_proposal_returns_none_without_matching_allowlisted_tool(
     assert proposal is None
 
 
+def test_deterministic_proposal_selects_allowlisted_cloud_restart(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("AGENT_LLM_PROVIDER", "deterministic")
+
+    proposal, _ = tool_proposal.propose_tool(
+        title="Restart EC2 instance i-portfolio-demo-001",
+        description="The sandbox server is unavailable and needs a restart.",
+        reporter_email="user@example.com",
+        external_ref="INC-1",
+        domain="Infrastructure",
+        severity="P2",
+        investigation={"recommendation": "investigate_further"},
+        knowledge_context="",
+        allowed_tools=[tool_entry("Cloud.RestartInstance")],
+    )
+
+    assert proposal is not None
+    assert proposal["tool_name"] == "Cloud.RestartInstance"
+    assert proposal["arguments"] == {"instanceId": "i-portfolio-demo-001"}
+
+
 def test_tool_proposal_skips_when_investigation_already_resolved(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:

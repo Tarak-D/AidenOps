@@ -13,6 +13,16 @@ using MudBlazor.Services;
 using Serilog;
 
 var builder = WebApplication.CreateBuilder(args);
+var isApiTestHost =
+    builder.Environment.IsEnvironment("Test") ||
+    builder.Configuration.GetValue<bool>(
+        "AIOps:Testing:UseInMemoryOrleansStorage");
+
+if (isApiTestHost)
+{
+    builder.Configuration["ConnectionStrings:PostgresConnection"] =
+        string.Empty;
+}
 
 // Structured logging (console; Seq sink is a documented option for later phases).
 builder.Host.UseSerilog((ctx, lc) => lc
@@ -26,18 +36,25 @@ builder.UseOrleans(silo =>
 {
     silo.UseLocalhostClustering();
 
-    silo.AddAdoNetGrainStorage(
-        "ticketStore",
-        options =>
-        {
-            options.Invariant = "Npgsql";
+    if (isApiTestHost)
+    {
+        silo.AddMemoryGrainStorage("ticketStore");
+    }
+    else
+    {
+        silo.AddAdoNetGrainStorage(
+            "ticketStore",
+            options =>
+            {
+                options.Invariant = "Npgsql";
 
-            options.ConnectionString =
-                builder.Configuration.GetConnectionString(
-                    "PostgresConnection")
-                ?? throw new InvalidOperationException(
-                    "PostgresConnection is not configured.");
-        });
+                options.ConnectionString =
+                    builder.Configuration.GetConnectionString(
+                        "PostgresConnection")
+                    ?? throw new InvalidOperationException(
+                        "PostgresConnection is not configured.");
+            });
+    }
 });
 
 // --- Blazor + MudBlazor ---
@@ -65,6 +82,7 @@ builder.Services.AddScoped<RetrievalEvaluationRunner>();
 builder.Services.AddScoped<EvaluationComparisonService>();
 builder.Services.AddScoped<EvaluationAcceptanceGate>();
 builder.Services.AddScoped<EvaluationAcceptanceService>();
+builder.Services.AddScoped<EvaluationAcceptanceHarness>();
 builder.Services.Configure<EvaluationAcceptancePolicyOptions>(
     builder.Configuration.GetSection(
         EvaluationAcceptancePolicyOptions.SectionName));
@@ -98,9 +116,11 @@ if (!app.Environment.IsDevelopment())
     app.UseHsts();
 }
 
-app.UseStatusCodePagesWithReExecute(
-    "/not-found",
-    createScopeForStatusCodePages: true);
+app.UseWhen(
+    context => !context.Request.Path.StartsWithSegments("/api"),
+    branch => branch.UseStatusCodePagesWithReExecute(
+        "/not-found",
+        createScopeForStatusCodePages: true));
 
 app.UseHttpsRedirection();
 
@@ -182,6 +202,7 @@ app.MapGet(
 
 // --- Phase 2: ticket lifecycle API ---
 app.MapTicketApi();
+app.MapAuditApi();
 app.MapKnowledgeApi();
 app.MapCloudIntegrationApi();
 app.MapEvaluationApi();

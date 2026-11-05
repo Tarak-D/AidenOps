@@ -51,7 +51,9 @@ public sealed class ClassicalMlEvaluationRunner
     public async Task<ExperimentRunRecord> RunAsync(
         string experimentId,
         string? notes = null,
-        CancellationToken cancellationToken = default)
+        CancellationToken cancellationToken = default,
+        string? sourceRevision = null,
+        string? datasetSha256 = null)
     {
         if (string.IsNullOrWhiteSpace(experimentId) ||
             experimentId.Length > 200 ||
@@ -112,7 +114,9 @@ public sealed class ClassicalMlEvaluationRunner
             startedAt,
             finishedAt,
             JsonSerializer.Serialize(metrics),
-            notes ?? "Fixed Phase 15 classical ML baseline evaluation.");
+            notes ?? "Fixed Phase 15 classical ML baseline evaluation.",
+            sourceRevision,
+            datasetSha256);
 
         await _evaluationStore.RecordRunAsync(run, cancellationToken);
         return run;

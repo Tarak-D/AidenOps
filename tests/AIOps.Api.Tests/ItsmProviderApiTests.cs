@@ -15,11 +15,11 @@ using Microsoft.Extensions.DependencyInjection.Extensions;
 
 namespace AIOps.Api.Tests;
 
-public sealed class ItsmProviderApiTests : IClassFixture<WebApplicationFactory<Program>>
+public sealed class ItsmProviderApiTests : IClassFixture<ApiTestWebApplicationFactory>
 {
-    private readonly WebApplicationFactory<Program> _factory;
+    private readonly ApiTestWebApplicationFactory _factory;
 
-    public ItsmProviderApiTests(WebApplicationFactory<Program> factory)
+    public ItsmProviderApiTests(ApiTestWebApplicationFactory factory)
     {
         _factory = factory;
     }
@@ -45,7 +45,7 @@ public sealed class ItsmProviderApiTests : IClassFixture<WebApplicationFactory<P
     [Fact]
     public async Task AdminCanSelectRealProviderAndStatusRemainsNotConfigured()
     {
-        using var client = CreateClient();
+        using var client = CreateClient("Development");
         client.DefaultRequestHeaders.Add("X-Dev-User", "admin");
 
         using var selectionResponse = await client.PostAsJsonAsync(
@@ -68,7 +68,7 @@ public sealed class ItsmProviderApiTests : IClassFixture<WebApplicationFactory<P
     [Fact]
     public async Task DevelopmentIdentityCanManageIntegrations()
     {
-        using var client = CreateClient();
+        using var client = CreateClient("Development");
         client.DefaultRequestHeaders.Add("X-Dev-User", "viewer");
 
         using var response = await client.PostAsJsonAsync(
@@ -167,7 +167,7 @@ public sealed class ItsmProviderApiTests : IClassFixture<WebApplicationFactory<P
     }
 
     private HttpClient CreateClient(
-        string environment = "Development",
+        string environment = "Test",
         bool useProductionAdmin = false) => _factory.WithWebHostBuilder(builder =>
     {
         builder.UseEnvironment(environment);

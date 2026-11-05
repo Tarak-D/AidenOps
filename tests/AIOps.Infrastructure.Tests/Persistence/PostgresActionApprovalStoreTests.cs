@@ -11,10 +11,7 @@ namespace AIOps.Infrastructure.Tests.Persistence;
 
 public sealed class PostgresActionApprovalStoreTests
 {
-    private const string ConnectionString =
-        "Host=127.0.0.1;Port=5432;Database=aios;Username=aios;Password=aiospw";
-
-    [Fact]
+    [RequiresPostgresFact]
     public async Task Action_and_approval_records_round_trip_all_domain_statuses()
     {
         var actionIds = new List<Guid>();
@@ -144,7 +141,7 @@ public sealed class PostgresActionApprovalStoreTests
         }
     }
 
-    [Fact]
+    [RequiresPostgresFact]
     public async Task Approval_decision_and_audit_event_round_trip()
     {
         var action = NewAction(Guid.NewGuid(), RiskLevel.Moderate);
@@ -223,7 +220,7 @@ public sealed class PostgresActionApprovalStoreTests
         }
     }
 
-    [Fact]
+    [RequiresPostgresFact]
     public async Task Action_execution_claim_is_atomic_across_contexts()
     {
         var action = NewAction(Guid.NewGuid());
@@ -272,7 +269,7 @@ public sealed class PostgresActionApprovalStoreTests
     private static AIOpsDbContext CreateContext()
     {
         var options = new DbContextOptionsBuilder<AIOpsDbContext>()
-            .UseNpgsql(ConnectionString, npgsqlOptions => npgsqlOptions.UseVector())
+            .UseNpgsql(PostgresTestEnvironment.ConnectionString, npgsqlOptions => npgsqlOptions.UseVector())
             .Options;
         return new AIOpsDbContext(options);
     }
