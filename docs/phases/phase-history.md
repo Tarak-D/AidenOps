@@ -26,12 +26,20 @@ The previous README marked Phases 1-14 complete. That historical statement is no
 
 ## Latest recorded checkpoint
 
-- Repository HEAD: `2e7aaf2`
-- Commit message: `Add scikit-learn evaluation dependency`
-- Current working-tree verification: .NET 509 passed, 0 failed, 0 skipped; Python 159 passed, 0 failed, with one Starlette/AnyIO deprecation warning.
-- These results include uncommitted audit changes and are not a release checkpoint.
+- Historical checkpoint: `2e7aaf2` — `Add scikit-learn evaluation dependency`.
+  Its recorded test counts are historical only and must not be used as current
+  verification.
+- Current repository checkpoint verified on 2026-11-18: `0a57e78` — `Complete
+  Phase 15 evaluation acceptance checkpoint`.
+- Current local verification: .NET Release **615 passed, 0 failed, 12 skipped**;
+  Python **164 passed, 0 failed**, with one Starlette multipart deprecation
+  warning. PostgreSQL skips are opt-in local integrations requiring isolated
+  connection environment variables.
+- These are local results, not a release checkpoint, a production-readiness
+  claim, or proof of live provider integration.
 
-These results are historical checkpoint results. Rerun the test suites to establish the current results after documentation changes.
+Rerun the test suites after code, dependency, environment, or documentation
+changes to establish a new current result.
 
 ## Phase 15: Evaluation progress
 

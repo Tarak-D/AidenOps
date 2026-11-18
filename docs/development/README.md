@@ -107,24 +107,35 @@ running them. CI sets it only for its disposable PostgreSQL service.
 
 ## Python environment
 
-Run from the repository's Python directory:
+The deterministic .NET-to-Python integration test discovers an interpreter in
+this order: `AIDENOPS_PYTHON_EXECUTABLE`, repository-root `.venv`, then
+repository-root `venv` (with Windows and Unix layouts supported). An explicit
+override must point to an existing interpreter; it never silently falls back.
+
+Create the repository-root virtual environment and install the Python service
+requirements:
 
 ```powershell
-cd D:\Project\AIOps.AgentSwarm\python
+Set-Location D:\Project\AIOps.AgentSwarm
 python -m venv .venv
 .\.venv\Scripts\Activate.ps1
 python --version
-pip install -r requirements.txt
+python -m pip install -r .\python\requirements.txt
 ```
 
-If `.venv` already exists, activate it instead of recreating it.
+If `.venv` already exists, activate it instead of recreating it. To use a
+different existing interpreter for the deterministic HTTP integration test:
+
+```powershell
+$env:AIDENOPS_PYTHON_EXECUTABLE = 'C:\path with spaces\python.exe'
+```
 
 ## Run the Python service
 
-From the Python directory:
+From the repository root with the virtual environment active:
 
 ```powershell
-uvicorn agent_service.main:app --host 127.0.0.1 --port 8000
+python -m uvicorn agent_service.main:app --app-dir .\python --host 127.0.0.1 --port 8000
 ```
 
 In another terminal, check the health endpoint:
@@ -142,10 +153,10 @@ dotnet build AIOps.slnx --configuration Release
 dotnet test AIOps.slnx --configuration Release
 ```
 
-From the Python directory:
+From the repository root with the virtual environment active:
 
 ```powershell
-python -m pytest -q
+python -m pytest .\python\agent_service\tests -q
 ```
 
 The CI workflow runs the Python suite with the deterministic provider selected,

@@ -20,6 +20,46 @@ namespace AIOps.Orchestration.Tests.Evaluation;
 
 public sealed class DeterministicPythonAgentEvaluationIntegrationTests
 {
+    private const string PythonExecutableVariable = "AIDENOPS_PYTHON_EXECUTABLE";
+
+    [Fact]
+    public void Python_interpreter_explicit_value_takes_precedence()
+    {
+        const string configured = @"C:\Tools\Python With Spaces\python.exe";
+        var selected = ResolvePythonExecutable(
+            @"C:\repository",
+            configured,
+            path => path == configured);
+
+        Assert.Equal(configured, selected);
+    }
+
+    [Fact]
+    public void Python_interpreter_detects_repository_dot_venv()
+    {
+        var repository = @"C:\repository";
+        var expected = Path.Combine(repository, ".venv", "Scripts", "python.exe");
+        var selected = ResolvePythonExecutable(
+            repository,
+            configuredExecutable: null,
+            path => path == expected);
+
+        Assert.Equal(expected, selected);
+    }
+
+    [Fact]
+    public void Python_interpreter_missing_configuration_has_useful_error()
+    {
+        var exception = Assert.Throws<InvalidOperationException>(() =>
+            ResolvePythonExecutable(
+                @"C:\repository",
+                @"C:\missing\python.exe",
+                _ => false));
+
+        Assert.Contains(PythonExecutableVariable, exception.Message);
+        Assert.Contains("does not exist", exception.Message, StringComparison.OrdinalIgnoreCase);
+    }
+
     [Fact]
     public async Task EvaluationRunner_persists_service_failures_without_counting_them_as_success()
     {
@@ -609,7 +649,9 @@ public sealed class DeterministicPythonAgentEvaluationIntegrationTests
             var port = GetAvailablePort();
             var startInfo = new ProcessStartInfo
             {
-                FileName = "python",
+                FileName = ResolvePythonExecutable(
+                    repositoryRoot,
+                    Environment.GetEnvironmentVariable(PythonExecutableVariable)),
                 WorkingDirectory = pythonRoot,
                 UseShellExecute = false,
                 RedirectStandardOutput = true,
@@ -769,5 +811,43 @@ public sealed class DeterministicPythonAgentEvaluationIntegrationTests
                 _process.Dispose();
             }
         }
+    }
+
+    private static string ResolvePythonExecutable(
+        string repositoryRoot,
+        string? configuredExecutable,
+        Func<string, bool>? fileExists = null)
+    {
+        fileExists ??= File.Exists;
+
+        if (!string.IsNullOrWhiteSpace(configuredExecutable))
+        {
+            if (!fileExists(configuredExecutable))
+            {
+                throw new InvalidOperationException(
+                    $"{PythonExecutableVariable} points to an interpreter that does not exist: {configuredExecutable}");
+            }
+
+            return configuredExecutable;
+        }
+
+        var candidates = new[]
+        {
+            Path.Combine(repositoryRoot, ".venv", "Scripts", "python.exe"),
+            Path.Combine(repositoryRoot, "venv", "Scripts", "python.exe"),
+            Path.Combine(repositoryRoot, ".venv", "bin", "python"),
+            Path.Combine(repositoryRoot, ".venv", "bin", "python3"),
+            Path.Combine(repositoryRoot, "venv", "bin", "python"),
+            Path.Combine(repositoryRoot, "venv", "bin", "python3")
+        };
+
+        var selected = candidates.FirstOrDefault(fileExists);
+        if (selected is not null)
+        {
+            return selected;
+        }
+
+        throw new InvalidOperationException(
+            $"No repository Python interpreter was found. Configure {PythonExecutableVariable} or create .venv/venv under {repositoryRoot}.");
     }
 }

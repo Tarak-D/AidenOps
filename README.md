@@ -81,14 +81,14 @@ Provider-independent LLM layer
 
 Python handles agent workflow and proposals. Privileged tools are executed through .NET after server-side validation and approval checks.
 
-## Current development status
+## Verified current status
 
 - Phases 1–14: recorded as complete in the project history.
-- Phase 15: advanced evaluation improvements are in progress; do not treat every originally planned Phase 15 item as complete without checking the implementation.
-- Repository HEAD: `7553bcf` — `Add reproducible classical ML evaluation`.
-- Latest local Release .NET test run: **615 passed, 0 failed, 12 skipped**. The skipped tests are opt-in PostgreSQL integrations.
+- Phase 15: evaluation capabilities are implemented incrementally; trusted baseline/candidate enforcement is not implemented.
+- Repository HEAD verified on 2026-11-18: `0a57e78` — `Complete Phase 15 evaluation acceptance checkpoint`.
+- Latest local Release .NET test run: **615 passed, 0 failed, 12 skipped**. The skips are opt-in PostgreSQL integration tests without their isolated local connection settings.
 - Latest local Python test run: **164 passed, 0 failed**, with one Starlette multipart deprecation warning.
-- These are local results for the current worktree, not a release or CI checkpoint.
+- These are local verification results, not a production-release claim or proof of live provider operation.
 
 ## Current evaluation work
 
@@ -103,6 +103,19 @@ The latest recorded Phase 15 changes include:
 - The LLM evaluation boundary verifies that prediction IDs match the submitted cases.
 
 Pricing-based cost is an estimate based on configured rates and reported token counts; it is not a provider invoice.
+
+## Authentication and deployment limitations
+
+`X-Dev-User` is a Development-only local demo mechanism. It is enabled only by
+`appsettings.Development.json`. In Production, Staging, or another
+non-Development environment, the Host registers an unconfigured authentication
+handler and protected endpoints fail closed with `401` until a real identity
+provider is integrated. OIDC/Microsoft Entra authentication is not implemented.
+
+The repository does not provide a production hosting topology, managed secret
+store, monitoring/alerting backend, backup/recovery process, or verified live
+provider deployment. Provider adapters and mock-tested behavior are boundaries
+for future production work, not evidence of a production rollout.
 
 ## Technology stack
 

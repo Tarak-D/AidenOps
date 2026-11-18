@@ -67,6 +67,18 @@ public sealed class AuthenticationBoundaryApiTests
     }
 
     [Fact]
+    public async Task Development_header_authenticates_for_queue_access()
+    {
+        using var client = _developmentFactory.WithWebHostBuilder(builder =>
+            builder.UseEnvironment("Development")).CreateClient();
+        client.DefaultRequestHeaders.Add("X-Dev-User", "viewer");
+
+        using var response = await client.GetAsync("/api/v1/tickets");
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+    }
+
+    [Fact]
     public async Task Production_ignores_development_identity_header_for_sensitive_routes()
     {
         var acceptanceStore = new RecordingAcceptanceStore();
@@ -151,6 +163,22 @@ public sealed class AuthenticationBoundaryApiTests
             new { actionExecutionId = Guid.NewGuid() });
         Assert.Equal(HttpStatusCode.Unauthorized, resumeResponse.StatusCode);
         Assert.Empty(acceptanceStore.Records);
+    }
+
+    [Fact]
+    public async Task Staging_ignores_development_identity_header_and_fails_closed()
+    {
+        using var client = _developmentFactory.WithWebHostBuilder(builder =>
+            builder.UseEnvironment("Staging")).CreateClient();
+        client.DefaultRequestHeaders.Add("X-Dev-User", "admin");
+
+        using var ticketResponse = await client.GetAsync("/api/v1/tickets");
+        using var approvalResponse = await client.PostAsJsonAsync(
+            $"/api/v1/approvals/{Guid.NewGuid()}/decision",
+            new DecideApprovalRequest(true, "Untrusted staging header."));
+
+        Assert.Equal(HttpStatusCode.Unauthorized, ticketResponse.StatusCode);
+        Assert.Equal(HttpStatusCode.Unauthorized, approvalResponse.StatusCode);
     }
 
     [Theory]
