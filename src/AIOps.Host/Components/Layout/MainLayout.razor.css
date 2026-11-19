@@ -1,8 +1,9 @@
 #blazor-error-ui {
-    color-scheme: light only;
-    background: lightyellow;
+    color-scheme: dark;
+    background: #3f1d34;
+    color: #ffe4f2;
     bottom: 0;
-    box-shadow: 0 -1px 2px rgba(0, 0, 0, 0.2);
+    box-shadow: 0 -8px 28px rgba(0, 0, 0, 0.34);
     box-sizing: border-box;
     display: none;
     left: 0;
@@ -11,6 +12,15 @@
     width: 100%;
     z-index: 1000;
 }
+
+.aiden-shell { min-height: 100vh; background: #090f1d; }
+.aiden-appbar { min-height: 72px; padding: 0 2rem; background: rgba(10, 17, 32, .92) !important; border-bottom: 1px solid rgba(148, 163, 184, .14); backdrop-filter: blur(18px); }.aiden-menu-button { margin-right: .65rem; color: #a8b5cf; }
+.aiden-brand { display: flex; align-items: center; gap: .7rem; min-width: 250px; }.aiden-mark { display: grid; place-items: center; width: 2.2rem; height: 2.2rem; border-radius: .7rem; color: #d8b4fe; background: linear-gradient(135deg, #6d28d9, #0e7490); box-shadow: 0 10px 24px rgba(91, 33, 182, .28); }.aiden-brand-name { color: #f8fafc; font-weight: 800; letter-spacing: -.03em; line-height: 1; }.aiden-brand-caption { margin-top: .2rem; color: #7b8ba9; font-size: .57rem; font-weight: 800; letter-spacing: .11em; }
+.aiden-drawer { width: 248px; padding: 1.25rem .8rem; background: rgba(11,18,33,.98) !important; border-right: 1px solid rgba(148,163,184,.13); }.drawer-heading { display: flex; justify-content: space-between; align-items: center; padding: .35rem .65rem 1rem; color: #6f819f; font-size: .66rem; font-weight: 800; letter-spacing: .12em; }.aiden-drawer-nav ::deep .mud-nav-link { margin: .2rem 0; border-radius: .65rem; color: #9eacc3; font-size: .88rem; }.aiden-drawer-nav ::deep .mud-nav-link:hover { background: rgba(99,102,241,.11); color: #e2e8f0; }.aiden-drawer-nav ::deep .mud-nav-link.active { color: #e9d5ff; background: linear-gradient(90deg, rgba(124,58,237,.27), rgba(6,182,212,.07)); }.drawer-footer { position: absolute; right: .8rem; bottom: 1.3rem; left: .8rem; display: flex; gap: .65rem; align-items: center; padding: .8rem; border: 1px solid rgba(148,163,184,.13); border-radius: .75rem; background: rgba(30,41,59,.35); color: #a78bfa; }.drawer-footer-title { color: #dbe5f5; font-size: .76rem; font-weight: 700; }.drawer-footer-copy { color: #7485a3; font-size: .68rem; }
+.aiden-statuses { display: flex; align-items: center; gap: .5rem; }.aiden-status-chip { font-size: .68rem; font-weight: 700; letter-spacing: .035em; }
+.aiden-main { min-height: calc(100vh - 72px); padding: 1.5rem 2rem; background: radial-gradient(circle at 10% -15%, rgba(67,56,202,.18), transparent 28rem), radial-gradient(circle at 90% 0, rgba(8,145,178,.12), transparent 26rem), #090f1d; }
+@media (max-width: 960px) { .aiden-appbar { padding: 0 1rem; }.aiden-brand { min-width: auto; }.aiden-brand-caption, .aiden-statuses { display: none; }.aiden-main { padding: 1rem; } }
+@media (max-width: 620px) { .aiden-brand { margin-right: .5rem; }.aiden-brand-name { font-size: 1rem; } }
 
     #blazor-error-ui .dismiss {
         cursor: pointer;

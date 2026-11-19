@@ -19,32 +19,33 @@
 <MudDialogProvider />
 <MudSnackbarProvider />
 
-<MudLayout>
-    <MudAppBar Elevation="1">
-        <MudIcon Icon="@Icons.Material.Filled.SmartToy" Class="mr-2" />
-        <MudText Typo="Typo.h6">AIOps Agent Platform</MudText>
-        <MudNavLink Href="/" Match="NavLinkMatch.All" Icon="@Icons.Material.Filled.Dashboard" Class="ml-4">
-            Dashboard
-        </MudNavLink>
-        <MudNavLink Href="/integrations" Match="NavLinkMatch.All" Icon="@Icons.Material.Filled.Settings" Class="ml-1">
-            Integrations
-        </MudNavLink>
-        <MudNavLink Href="/demo" Match="NavLinkMatch.All" Icon="@Icons.Material.Filled.PlayCircle" Class="ml-1">
-            Demo
-        </MudNavLink>
+<MudLayout Class="aiden-shell">
+    <MudAppBar Elevation="0" Class="aiden-appbar">
+        <MudIconButton Icon="@Icons.Material.Filled.Menu" Color="Color.Inherit" OnClick="ToggleDrawer" Class="aiden-menu-button" aria-label="Toggle navigation" />
+        <div class="aiden-brand"><div class="aiden-mark"><MudIcon Icon="@Icons.Material.Filled.AutoAwesome" /></div><div><MudText Typo="Typo.subtitle1" Class="aiden-brand-name">AidenOps</MudText><div class="aiden-brand-caption">AI OPERATIONS CONTROL PLANE</div></div></div>
         <MudSpacer />
-        <MudChip T="string" Color="@cloudProviderColor" Variant="Variant.Filled" Size="Size.Small">
-            Cloud Provider: @cloudProviderLabel
+        <div class="aiden-statuses">
+        <MudChip T="string" Color="@cloudProviderColor" Variant="Variant.Outlined" Size="Size.Small" Class="aiden-status-chip">
+            CLOUD · @cloudProviderLabel
         </MudChip>
         @if (_itsmStatus is not null)
         {
-            <MudChip T="string" Color="@ItsmStatusColor" Variant="Variant.Outlined" Size="Size.Small" Class="ml-2">
+            <MudChip T="string" Color="@ItsmStatusColor" Variant="Variant.Outlined" Size="Size.Small" Class="aiden-status-chip">
                 @ItsmHeaderLabel
             </MudChip>
         }
-        <MudChip T="string" Color="Color.Info" Variant="Variant.Outlined" Size="Size.Small">Phase 1 — Foundation</MudChip>
+        </div>
     </MudAppBar>
-    <MudMainContent Class="pa-6">
+    <MudDrawer @bind-Open="_drawerOpen" Variant="DrawerVariant.Responsive" Elevation="0" Class="aiden-drawer">
+        <div class="drawer-heading"><span>WORKSPACE</span><MudChip T="string" Size="Size.Small" Variant="Variant.Outlined" Color="Color.Info">GOVERNED</MudChip></div>
+        <MudNavMenu Class="aiden-drawer-nav">
+            <MudNavLink Href="/" Match="NavLinkMatch.All" Icon="@Icons.Material.Filled.Dashboard">Dashboard</MudNavLink>
+            <MudNavLink Href="/integrations" Match="NavLinkMatch.All" Icon="@Icons.Material.Filled.Hub">Integrations</MudNavLink>
+            <MudNavLink Href="/demo" Match="NavLinkMatch.All" Icon="@Icons.Material.Filled.PlayCircle">Guided demo</MudNavLink>
+        </MudNavMenu>
+        <div class="drawer-footer"><MudIcon Icon="@Icons.Material.Filled.VerifiedUser" /><div><div class="drawer-footer-title">Server authority</div><div class="drawer-footer-copy">Policy · approval · audit</div></div></div>
+    </MudDrawer>
+    <MudMainContent Class="aiden-main">
         @Body
     </MudMainContent>
 </MudLayout>
@@ -58,6 +59,7 @@
 @code {
     private AIOps.Abstractions.Integrations.ItsmProviderStatus? _itsmStatus;
     private Microsoft.JSInterop.IJSObjectReference? _itsmApi;
+    private bool _drawerOpen = true;
     private string ItsmConnectionLabel => _itsmStatus?.ConnectionStatus switch
     {
         "NotConfigured" => "Not Configured",
@@ -76,6 +78,7 @@
     private string ItsmHeaderLabel => _itsmStatus?.Mode == "Simulated"
         ? "ITSM: SIMULATED"
         : $"ITSM: {_itsmStatus?.DisplayName.ToUpperInvariant()} · {ItsmConnectionLabel.ToUpperInvariant()}";
+    private void ToggleDrawer() => _drawerOpen = !_drawerOpen;
 
     protected override async Task OnAfterRenderAsync(bool firstRender)
     {

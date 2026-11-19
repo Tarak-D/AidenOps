@@ -8,13 +8,13 @@
 
 <PageTitle>Integrations | AIOps Agent Platform</PageTitle>
 
-<div style="padding-top: 48px;">
-<MudText Typo="Typo.h3" GutterBottom="true">Integrations</MudText>
-<MudText Typo="Typo.subtitle1" Class="mb-6">
-    Manage external systems used by AidenOps.
-</MudText>
+<section class="integrations-page">
+<header class="integrations-hero">
+    <div><div class="integrations-eyebrow">INTEGRATION BOUNDARY</div><MudText Typo="Typo.h2" Class="integrations-title">Providers, under control.</MudText><MudText Typo="Typo.body1" Class="integrations-subtitle">View the server-resolved integration posture and manage eligible providers through the existing administrator-authorized control plane.</MudText></div>
+    <MudChip T="string" Color="Color.Info" Variant="Variant.Outlined" Class="integrations-chip">SERVER-SIDE SELECTION</MudChip>
+</header>
 
-<MudCard Elevation="2" Style="max-width: 760px">
+<MudCard Elevation="0" Class="integration-card">
     <MudCardHeader>
         <CardHeaderContent>
             <MudText Typo="Typo.h5">ITSM Integration</MudText>
@@ -85,7 +85,7 @@
     </MudCardContent>
 </MudCard>
 
-<MudCard Elevation="2" Style="max-width: 760px" Class="mt-6">
+<MudCard Elevation="0" Class="integration-card mt-6">
     <MudCardHeader>
         <CardHeaderContent>
             <MudText Typo="Typo.h5">Network Diagnostics</MudText>
@@ -155,7 +155,7 @@
         }
     </MudCardContent>
 </MudCard>
-</div>
+</section>
 
 @code {
     private AIOps.Abstractions.Integrations.ItsmProviderStatus? _status;

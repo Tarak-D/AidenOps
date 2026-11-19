@@ -1,46 +1,84 @@
 @page "/"
+@inject Microsoft.JSInterop.IJSRuntime JS
+@inject Microsoft.AspNetCore.Hosting.IWebHostEnvironment HostEnvironment
 
-<PageTitle>AIOps Agent Platform</PageTitle>
+<PageTitle>Operations Command Center | AidenOps</PageTitle>
 
-<MudText Typo="Typo.h3" GutterBottom="true">Autonomous IT Operations Agent Platform</MudText>
-<MudText Typo="Typo.subtitle1" Class="mb-6">
-    Multi-agent AI triage, investigation, and resolution of IT support tickets —
-    .NET 10 + Orleans control plane, Python/LangGraph agent layer (Phase 5+).
-</MudText>
+<section class="command-center" aria-label="AidenOps operations command center">
+    <header class="command-hero">
+        <div>
+            <div class="eyebrow"><span class="status-pulse" aria-hidden="true"></span>CONTROL PLANE · API-BACKED VIEW</div>
+            <MudText Typo="Typo.h2" Class="command-title">Operations, governed by design.</MudText>
+            <MudText Typo="Typo.body1" Class="command-subtitle">Monitor the incident queue, provider posture, human approvals, and evaluation evidence from one server-authoritative control plane.</MudText>
+        </div>
+        <div class="command-actions">
+            <MudButton Href="/demo" Variant="Variant.Filled" Color="Color.Primary" StartIcon="@Icons.Material.Filled.PlayArrow">Run guided demo</MudButton>
+            <MudButton Href="/integrations" Variant="Variant.Outlined" StartIcon="@Icons.Material.Filled.Hub">View integrations</MudButton>
+        </div>
+    </header>
 
-<MudAlert Severity="Severity.Info" Variant="Variant.Outlined" Class="mb-4">
-    <b>Phase 1 complete:</b> solution skeleton, domain model, platform abstractions,
-    security policies, and dev infrastructure are in place. Agent workflows activate from Phase 5.
-</MudAlert>
+    @if (_loading)
+    {
+        <MudProgressLinear Indeterminate="true" Color="Color.Primary" Class="command-progress" />
+    }
 
-<MudGrid>
-    <MudItem xs="12" md="4">
-        <MudCard Elevation="2">
-            <MudCardHeader><CardHeaderContent><MudText Typo="Typo.h6">Control Plane</MudText></CardHeaderContent></MudCardHeader>
-            <MudCardContent>
-                <MudText>.NET 10 ASP.NET Core, Orleans co-hosted silo (in-memory grain storage in dev), SignalR hub at <code>/hubs/tickets</code>.</MudText>
-            </MudCardContent>
-        </MudCard>
-    </MudItem>
-    <MudItem xs="12" md="4">
-        <MudCard Elevation="2">
-            <MudCardHeader><CardHeaderContent><MudText Typo="Typo.h6">AI Agent Layer</MudText></CardHeaderContent></MudCardHeader>
-            <MudCardContent>
-                <MudText>LangGraph multi-agent workflow behind <code>IAgentGateway</code> (currently a deterministic fake).
-                Kimi K3 via NVIDIA NIM — key configured via user-secrets/env only.</MudText>
-            </MudCardContent>
-        </MudCard>
-    </MudItem>
-    <MudItem xs="12" md="4">
-        <MudCard Elevation="2">
-            <MudCardHeader><CardHeaderContent><MudText Typo="Typo.h6">Governance</MudText></CardHeaderContent></MudCardHeader>
-            <MudCardContent>
-                <MudText>Sensitive actions require human approval. Cloud actions use the provider shown in the header. Audit is append-only by design.</MudText>
-            </MudCardContent>
-        </MudCard>
-    </MudItem>
-</MudGrid>
+    @if (!string.IsNullOrWhiteSpace(_loadError))
+    {
+        <MudAlert Severity="Severity.Warning" Variant="Variant.Outlined" Class="mb-5">
+            @_loadError
+            <MudButton Variant="Variant.Text" Color="Color.Primary" OnClick="RefreshAsync" Class="ml-2">Retry</MudButton>
+        </MudAlert>
+    }
 
-<MudText Typo="Typo.body2" Class="mt-6" Color="Color.Secondary">
-    Ops endpoints: <code>/health</code>, <code>/api/v1/meta/selfcheck</code>, <code>/api/v1/meta/config</code>, <code>/api/v1/integrations/cloud/status</code>
-</MudText>
+    <MudGrid Class="command-kpis">
+        <MudItem xs="12" sm="6" lg="3"><MudPaper Class="metric-card" Elevation="0"><div class="metric-icon cyan"><MudIcon Icon="@Icons.Material.Filled.ConfirmationNumber" /></div><div><div class="metric-label">Incident queue</div><div class="metric-value">@Display(_snapshot?.TicketCount, _snapshot?.TicketsAvailable)</div><div class="metric-note">@(_snapshot?.TicketsAvailable == true ? "Tickets available to this identity" : "Queue unavailable")</div></div></MudPaper></MudItem>
+        <MudItem xs="12" sm="6" lg="3"><MudPaper Class="metric-card" Elevation="0"><div class="metric-icon violet"><MudIcon Icon="@Icons.Material.Filled.Approval" /></div><div><div class="metric-label">Pending approvals</div><div class="metric-value">@Display(_snapshot?.PendingApprovals, _snapshot?.ApprovalsAvailable)</div><div class="metric-note">@(_snapshot?.ApprovalsAvailable == true ? "Human decisions awaiting review" : "Approval access unavailable")</div></div></MudPaper></MudItem>
+        <MudItem xs="12" sm="6" lg="3"><MudPaper Class="metric-card" Elevation="0"><div class="metric-icon green"><MudIcon Icon="@Icons.Material.Filled.Cable" /></div><div><div class="metric-label">Integration posture</div><div class="metric-value">@ProviderCount</div><div class="metric-note">@ProviderNote</div></div></MudPaper></MudItem>
+        <MudItem xs="12" sm="6" lg="3"><MudPaper Class="metric-card" Elevation="0"><div class="metric-icon amber"><MudIcon Icon="@Icons.Material.Filled.FactCheck" /></div><div><div class="metric-label">Evaluation runs</div><div class="metric-value">@Display(_snapshot?.EvaluationRunCount, _snapshot?.EvaluationAvailable)</div><div class="metric-note">@(_snapshot?.EvaluationAvailable == true ? "Persisted evaluation evidence" : "Evaluation access unavailable")</div></div></MudPaper></MudItem>
+    </MudGrid>
+
+    <MudGrid Spacing="3">
+        <MudItem xs="12" lg="7"><MudPaper Class="command-panel" Elevation="0"><div class="panel-heading"><div><div class="panel-kicker">LIVE QUEUE</div><MudText Typo="Typo.h5">Recent incidents</MudText></div><MudButton Href="/demo" Variant="Variant.Text" Color="Color.Primary">Open sandbox</MudButton></div>
+            @if (_loading) { <div class="panel-state"><MudProgressCircular Indeterminate="true" Size="Size.Small" /> Loading incident data…</div> }
+            else if (_snapshot?.TicketsAvailable != true) { <div class="panel-state"><MudIcon Icon="@Icons.Material.Filled.Lock" /> Incident queue requires an authenticated operational identity.</div> }
+            else if (_snapshot.Tickets.Count == 0) { <div class="panel-state"><MudIcon Icon="@Icons.Material.Filled.Inbox" /> No incidents are visible yet. Start the guided sandbox to create one.</div> }
+            else { <div class="incident-list">@foreach (var ticket in _snapshot.Tickets) { <div class="incident-row"><div class="incident-symbol"><MudIcon Icon="@Icons.Material.Filled.Bolt" /></div><div class="incident-copy"><MudText Typo="Typo.subtitle2">@ticket.Title</MudText><MudText Typo="Typo.caption" Color="Color.Secondary">@ticket.Domain · @ticket.Severity · updated @FormatDate(ticket.UpdatedAt)</MudText></div><MudChip T="string" Size="Size.Small" Variant="Variant.Outlined" Color="Color.Info">@ticket.Status</MudChip></div> }</div> }
+        </MudPaper></MudItem>
+        <MudItem xs="12" lg="5"><MudPaper Class="command-panel" Elevation="0"><div class="panel-heading"><div><div class="panel-kicker">PROVIDER POSTURE</div><MudText Typo="Typo.h5">Integration boundary</MudText></div><MudButton Href="/integrations" Variant="Variant.Text" Color="Color.Primary">Manage</MudButton></div><div class="provider-list"><div class="provider-row"><span class="@ProviderDotClass(_snapshot?.Cloud)" role="img" aria-label="@ProviderHealthLabel(_snapshot?.Cloud)"></span><div class="incident-copy"><MudText Typo="Typo.subtitle2">Cloud</MudText><MudText Typo="Typo.caption" Color="Color.Secondary">@ProviderLabel(_snapshot?.Cloud)</MudText></div><MudChip T="string" Size="Size.Small" Variant="Variant.Outlined" Color="Color.Info">@ProviderMode(_snapshot?.Cloud)</MudChip></div><div class="provider-row"><span class="@ProviderDotClass(_snapshot?.Itsm)" role="img" aria-label="@ProviderHealthLabel(_snapshot?.Itsm)"></span><div class="incident-copy"><MudText Typo="Typo.subtitle2">ITSM</MudText><MudText Typo="Typo.caption" Color="Color.Secondary">@ProviderLabel(_snapshot?.Itsm)</MudText></div><MudChip T="string" Size="Size.Small" Variant="Variant.Outlined" Color="Color.Info">@ProviderMode(_snapshot?.Itsm)</MudChip></div><div class="provider-row"><span class="@ProviderDotClass(_snapshot?.Network)" role="img" aria-label="@ProviderHealthLabel(_snapshot?.Network)"></span><div class="incident-copy"><MudText Typo="Typo.subtitle2">Network diagnostics</MudText><MudText Typo="Typo.caption" Color="Color.Secondary">@ProviderLabel(_snapshot?.Network)</MudText></div><MudChip T="string" Size="Size.Small" Variant="Variant.Outlined" Color="Color.Info">@ProviderMode(_snapshot?.Network)</MudChip></div></div><MudAlert Severity="Severity.Info" Variant="Variant.Outlined" Dense="true" Class="mt-4">Providers are selected and enforced by .NET. The agent receives no provider credentials.</MudAlert></MudPaper></MudItem>
+        <MudItem xs="12" lg="7"><MudPaper Class="command-panel command-panel-accent" Elevation="0"><div class="panel-kicker">GOVERNED AGENT LIFECYCLE</div><MudText Typo="Typo.h5" Class="mb-2">Reasoning is separate from authority.</MudText><MudText Typo="Typo.body2" Color="Color.Secondary">LangGraph investigates and proposes. The .NET control plane validates server-owned schemas and risk, persists approvals, executes approved tools, resumes the run, and records the audit trail.</MudText><div class="lifecycle-steps" aria-label="AidenOps lifecycle"><span>TRIAGE</span><MudIcon Icon="@Icons.Material.Filled.ArrowForward" /><span>INVESTIGATE</span><MudIcon Icon="@Icons.Material.Filled.ArrowForward" /><span>APPROVE</span><MudIcon Icon="@Icons.Material.Filled.ArrowForward" /><span>EXECUTE</span><MudIcon Icon="@Icons.Material.Filled.ArrowForward" /><span>AUDIT</span></div></MudPaper></MudItem>
+        <MudItem xs="12" lg="5"><MudPaper Class="command-panel" Elevation="0"><div class="panel-kicker">DEMO READY</div><MudText Typo="Typo.h5">Show the complete safety story</MudText><MudText Typo="Typo.body2" Color="Color.Secondary" Class="mt-2">Use the sandbox to create a VPN investigation or a simulated cloud restart that pauses for a human decision before the server can execute it.</MudText><MudButton Href="/demo" Variant="Variant.Filled" Color="Color.Primary" StartIcon="@Icons.Material.Filled.PlayCircle" Class="mt-4">Launch guided demo</MudButton></MudPaper></MudItem>
+    </MudGrid>
+</section>
+
+@code {
+    private Microsoft.JSInterop.IJSObjectReference? _api;
+    private DashboardSnapshot? _snapshot;
+    private bool _loading = true;
+    private string? _loadError;
+    protected override async Task OnAfterRenderAsync(bool firstRender) { if (firstRender) await RefreshAsync(); }
+    private async Task RefreshAsync() { _loading = true; _loadError = null; try { _snapshot = await (await ApiAsync()).InvokeAsync<DashboardSnapshot>("loadDashboard", HostEnvironment.IsDevelopment()); if (_snapshot.HasPartialFailure) _loadError = "Some live operational data is unavailable. The values below only represent responses the control plane returned."; } catch (Microsoft.JSInterop.JSException ex) { _loadError = $"The operations dashboard could not load: {ex.Message}"; } finally { _loading = false; StateHasChanged(); } }
+    private async Task<Microsoft.JSInterop.IJSObjectReference> ApiAsync() => _api ??= await JS.InvokeAsync<Microsoft.JSInterop.IJSObjectReference>("import", "./Components/Pages/Home.razor.js");
+    private static string Display(int? value, bool? available) => available == true ? (value?.ToString() ?? "0") : "—";
+    private int ProviderCount => new[] { _snapshot?.Cloud, _snapshot?.Itsm, _snapshot?.Network }.Count(provider => provider is not null);
+    private string ProviderNote => ProviderCount == 0 ? "Status unavailable" : $"{ProviderCount} boundary status{(ProviderCount == 1 ? "" : "es")} loaded";
+    private static string FormatDate(DateTimeOffset? value) => value?.ToLocalTime().ToString("g") ?? "not reported";
+    private static string ProviderLabel(ProviderStatus? provider) => provider is null ? "Status unavailable" : $"{provider.DisplayName}{(string.IsNullOrWhiteSpace(provider.ConnectionStatus) ? "" : $" · {provider.ConnectionStatus}")}";
+    private static string ProviderMode(ProviderStatus? provider) => provider?.Mode ?? "Unavailable";
+    private static string ProviderDotClass(ProviderStatus? provider) => provider?.Health switch
+    {
+        "healthy" => "provider-dot provider-dot-healthy",
+        "warning" => "provider-dot provider-dot-warning",
+        "error" => "provider-dot provider-dot-error",
+        _ => "provider-dot provider-dot-unknown"
+    };
+    private static string ProviderHealthLabel(ProviderStatus? provider) => provider?.Health switch
+    {
+        "healthy" => "Healthy or simulated",
+        "warning" => "Not configured",
+        "error" => "Provider unavailable or failing",
+        _ => "Connectivity status unknown"
+    };
+    private sealed class DashboardSnapshot { public int? TicketCount { get; init; } public bool TicketsAvailable { get; init; } public int? PendingApprovals { get; init; } public bool ApprovalsAvailable { get; init; } public int? EvaluationRunCount { get; init; } public bool EvaluationAvailable { get; init; } public bool HasPartialFailure { get; init; } public List<DashboardTicket> Tickets { get; init; } = []; public ProviderStatus? Cloud { get; init; } public ProviderStatus? Itsm { get; init; } public ProviderStatus? Network { get; init; } }
+    private sealed class DashboardTicket { public string Title { get; init; } = "Untitled incident"; public string Domain { get; init; } = "Unclassified"; public string Severity { get; init; } = "Unspecified"; public string Status { get; init; } = "Unknown"; public DateTimeOffset? UpdatedAt { get; init; } }
+    private sealed class ProviderStatus { public string DisplayName { get; init; } = "Unavailable"; public string Mode { get; init; } = "Unavailable"; public string? ConnectionStatus { get; init; } public string Health { get; init; } = "unknown"; }
+}

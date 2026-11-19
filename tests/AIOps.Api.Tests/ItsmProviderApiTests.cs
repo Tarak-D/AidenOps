@@ -127,7 +127,7 @@ public sealed class ItsmProviderApiTests : IClassFixture<ApiTestWebApplicationFa
     }
 
     [Theory]
-    [InlineData("/", "Autonomous IT Operations Agent Platform")]
+    [InlineData("/", "Operations, governed by design.")]
     [InlineData("/integrations", "ITSM Integration")]
     public async Task DashboardAndIntegrationsRoutesLoadDirectlyAndOnRefresh(
         string path,

@@ -5,13 +5,20 @@
 
 <PageTitle>Sandbox Demo | AIOps Agent Platform</PageTitle>
 
-<div style="padding-top: 48px; max-width: 900px;">
-    <MudText Typo="Typo.h3" GutterBottom="true">Guided sandbox demo</MudText>
-    <MudAlert Severity="Severity.Info" Variant="Variant.Outlined" Class="mb-5">
+<section class="demo-page">
+    <header class="demo-hero">
+        <div>
+            <div class="demo-eyebrow"><span class="demo-pulse" aria-hidden="true"></span>GUIDED SANDBOX · SERVER-GUARDED</div>
+            <MudText Typo="Typo.h2" Class="demo-title">Watch an agent earn the right to act.</MudText>
+            <MudText Typo="Typo.body1" Class="demo-subtitle">A controlled walk-through of triage, proposal validation, human approval, simulated execution, audit, and evidence.</MudText>
+        </div>
+        <MudChip T="string" Color="Color.Info" Variant="Variant.Outlined" Class="demo-simulation-chip">SIMULATED PROVIDERS ONLY</MudChip>
+    </header>
+    <MudAlert Severity="Severity.Info" Variant="Variant.Outlined" Class="demo-boundary-alert mb-5">
         Python proposes. .NET validates the registered schema and policy, authorizes approvals, executes through ToolExecutor, and writes the audit trail. Both demos refuse to run unless their server-side provider is Simulated.
     </MudAlert>
 
-    <MudCard Elevation="2" Class="mb-6">
+    <MudCard Elevation="0" Class="demo-card mb-6">
         <MudCardHeader>
             <CardHeaderContent>
                 <MudText Typo="Typo.h5">Persisted evaluation results</MudText>
@@ -71,7 +78,7 @@
         </MudCardContent>
     </MudCard>
 
-    <MudCard Elevation="2">
+    <MudCard Elevation="0" Class="demo-card">
         <MudCardHeader><CardHeaderContent><MudText Typo="Typo.h5">VPN connectivity investigation</MudText><MudText Typo="Typo.body2" Color="Color.Secondary">Read-only simulated diagnostic</MudText></CardHeaderContent></MudCardHeader>
         <MudCardContent>
             <MudText Class="mb-4">Creates a deterministic VPN incident and invokes the existing agent-run lifecycle.</MudText>
@@ -85,7 +92,7 @@
         </MudCardContent>
     </MudCard>
 
-    <MudCard Elevation="2" Class="mt-6">
+    <MudCard Elevation="0" Class="demo-card mt-6">
         <MudCardHeader><CardHeaderContent><MudText Typo="Typo.h5">Approval and execution lifecycle</MudText><MudText Typo="Typo.body2" Color="Color.Secondary">Simulated cloud restart · Moderate risk · approval required</MudText></CardHeaderContent></MudCardHeader>
         <MudCardContent>
             <MudText Class="mb-4">The registered <code>Cloud.RestartInstance</code> tool changes infrastructure, so the server persists an approval request before it can execute. No real cloud operation is allowed by this demo.</MudText>
@@ -96,7 +103,7 @@
 
     @if (_approvalResult is not null)
     {
-        <MudCard Elevation="2" Class="mt-6">
+        <MudCard Elevation="0" Class="demo-card mt-6">
             <MudCardHeader><CardHeaderContent><MudText Typo="Typo.h5">Persisted approval state</MudText><MudText Typo="Typo.body2" Color="Color.Secondary">Existing approval, resume, and audit APIs</MudText></CardHeaderContent></MudCardHeader>
             <MudCardContent>
                 <MudGrid>
@@ -144,7 +151,7 @@
             </MudCardContent>
         </MudCard>
     }
-</div>
+</section>
 
 @code {
     private Microsoft.JSInterop.IJSObjectReference? _api;

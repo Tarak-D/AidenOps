@@ -1,3 +1,5 @@
+.demo-page { max-width: 1120px; margin: 0 auto; padding: 1.25rem 0 2.5rem; }
+.demo-hero { display: flex; justify-content: space-between; align-items: flex-start; gap: 2rem; padding: 1.4rem 0 1.8rem; }.demo-eyebrow { color: #7dd3fc; font-size: .72rem; font-weight: 800; letter-spacing: .12em; }.demo-pulse { display: inline-block; width: .48rem; height: .48rem; margin-right: .45rem; border-radius: 50%; background: #4ade80; box-shadow: 0 0 0 .22rem rgba(74,222,128,.12); }.demo-title { max-width: 760px; margin-top: .5rem; color: #f8fafc; font-weight: 750; letter-spacing: -.04em; }.demo-subtitle { max-width: 760px; margin-top: .8rem; color: #a8b5cf; }.demo-simulation-chip { margin-top: .4rem; color: #7dd3fc; font-size: .68rem; font-weight: 800; letter-spacing: .07em; }.demo-boundary-alert { border-color: rgba(34,211,238,.26) !important; background: rgba(8,47,73,.25) !important; }.demo-card { border: 1px solid rgba(148,163,184,.14); border-radius: 1rem; background: linear-gradient(145deg, rgba(18,29,51,.96), rgba(12,20,37,.96)); box-shadow: 0 18px 48px rgba(0,0,0,.14); }.demo-card ::deep .mud-card-header { padding: 1.35rem 1.35rem .85rem; }.demo-card ::deep .mud-card-content { padding: .85rem 1.35rem 1.35rem; }
 .demo-evaluation-run {
     padding-top: 1rem;
 }
@@ -21,7 +23,7 @@
 .demo-metric {
     padding: 0.25rem 0.55rem;
     border-radius: 0.35rem;
-    background: var(--mud-palette-background-grey);
+    background: rgba(99,102,241,.13);
     font-size: 0.8rem;
 }
 
@@ -86,3 +88,5 @@
     gap: 0.3rem 0.9rem;
     margin-top: 1.25rem;
 }
+
+@media (max-width: 720px) { .demo-hero { display: block; }.demo-simulation-chip { margin-top: 1.2rem; }.demo-title { font-size: 2.1rem; }.demo-card ::deep .mud-card-header, .demo-card ::deep .mud-card-content { padding-left: 1rem; padding-right: 1rem; } }

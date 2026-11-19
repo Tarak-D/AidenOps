@@ -2,6 +2,14 @@ h1:focus {
     outline: none;
 }
 
+:root { color-scheme: dark; --mud-palette-background: #090f1d; --mud-palette-surface: #111a2e; --mud-palette-text-primary: #dce6f6; --mud-palette-text-secondary: #9aabc6; --mud-palette-divider: rgba(148,163,184,.16); --mud-palette-primary: #8b5cf6; --mud-palette-info: #22d3ee; }
+html, body { min-height: 100%; background: #090f1d; }
+body { color: #d9e2f1; font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; }
+.mud-typography { letter-spacing: -.01em; }
+.mud-button-root { text-transform: none; font-weight: 700; letter-spacing: 0; transition: transform .16s ease, box-shadow .16s ease, background-color .16s ease; }
+.mud-button-root:hover { transform: translateY(-1px); }
+.mud-paper { color: #dce6f6; }
+
 .valid.modified:not([type=checkbox]) {
     outline: 1px solid #26b050;
 }
